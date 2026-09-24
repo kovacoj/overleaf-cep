@@ -174,11 +174,91 @@ data:
 
     echo "Overleaf startup complete. Supervising processes."
 
+    # --- Graceful shutdown (replaces init_preshutdown_scripts/) ---
+    # Upstream my_init runs on SIGTERM:
+    #   00_close_site          (skipped: /etc/overleaf/site_status is
+    #                          root-owned, not writable as uid 33)
+    #   01_flush_document_updater -> document-updater/scripts/flush_all.js
+    #   02_flush_project_history  -> project-history/scripts/flush_all.js
+    # The flushes matter: un-flushed doc edits and history ops live in Redis
+    # (ephemeral here) and would be lost on abrupt termination.
+    shutdown() {
+      echo "SIGTERM received: flushing queues before exit"
+      (cd /overleaf/services/document-updater && node scripts/flush_all.js >> /var/log/overleaf/document-updater.log 2>&1) \
+        || echo "WARNING: document-updater flush failed"
+      (cd /overleaf/services/project-history && node scripts/flush_all.js >> /var/log/overleaf/project-history.log 2>&1) \
+        || echo "WARNING: project-history flush failed"
+      nginx -s quit -c /nginx-conf/nginx.conf 2>/dev/null || true
+      # TERM all remaining children (node services)
+      pkill -TERM -P $$ 2>/dev/null || true
+      echo "shutdown complete"
+      exit 0
+    }
+    trap shutdown TERM INT
+
     # --- Supervise: exit if nginx dies (k8s restarts the pod) ---
     while true; do
       if ! kill -0 $(cat /run/nginx.pid 2>/dev/null || echo 0) 2>/dev/null; then
         echo "ERROR: nginx died"
         exit 1
       fi
+      sleep 2
+    done
+  # History maintenance scheduler, run by the history-cron sidecar
+  # (same pod as project-history, which listens on 127.0.0.1:3054 only -
+  # a Kubernetes CronJob in a separate pod cannot reach loopback, and we
+  # deliberately do not re-bind project-history to the pod interface).
+  # Mirrors server-ce/config/crontab-history:
+  #   */20 * * * *  periodic flush
+  #   30 * * * *    retry soft failures
+  #   45 * * * *    retry hard failures
+  # (the 03:00 full flush is a separate CronJob: overleaf-history-flush-all)
+  history-cron.sh: |
+    #!/bin/bash
+    set -u
+
+    PH_URL='http://127.0.0.1:3054'
+    last_flush=0
+    last_soft=0
+    last_hard=0
+
+    log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
+
+    # Wait for project-history to come up
+    until curl -fsS -o /dev/null "${PH_URL}/status" 2>/dev/null; do
+      log "waiting for project-history at ${PH_URL} ..."
       sleep 10
+    done
+    log "history-cron scheduler started (flush at */20, soft retry at :30, hard retry at :45)"
+
+    while true; do
+      mm=$(date +%M)
+      minute_epoch=$(( $(date +%s) / 60 ))
+
+      if [ $(( 10#$mm % 20 )) -eq 0 ] && [ "$minute_epoch" -ne "$last_flush" ]; then
+        last_flush=$minute_epoch
+        log "project-history periodic flush"
+        curl -fsS -X POST "${PH_URL}/flush/old?timeout=3600000&limit=5000&background=1" \
+          && log "periodic flush accepted" \
+          || log "periodic flush FAILED"
+      fi
+
+      if [ "$mm" = "30" ] && [ "$minute_epoch" -ne "$last_soft" ]; then
+        last_soft=$minute_epoch
+        log "project-history retry soft failures"
+        curl -fsS -X POST "${PH_URL}/retry/failures?failureType=soft&timeout=3600000&limit=10000" \
+          && log "soft retry accepted" \
+          || log "soft retry FAILED"
+      fi
+
+      if [ "$mm" = "45" ] && [ "$minute_epoch" -ne "$last_hard" ]; then
+        last_hard=$minute_epoch
+        log "project-history retry hard failures"
+        curl -fsS -X POST "${PH_URL}/retry/failures?failureType=hard&timeout=3600000&limit=10000" \
+          && log "hard retry accepted" \
+          || log "hard retry FAILED"
+      fi
+
+      # sleep to the next minute boundary
+      sleep $(( 60 - $(date +%S) ))
     done

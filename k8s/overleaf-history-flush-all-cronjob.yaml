@@ -1,0 +1,69 @@
+# Full project-history flush, replacing the upstream 03:00 crontab entry:
+#   0 3 * * * root /overleaf/cron/project-history-flush-all.sh
+#
+# Runs scripts/flush_all.js from the project-history service directly (as
+# uid 33, no /sbin/setuser, no my_init). It talks to MongoDB and Redis via
+# Service DNS and pushes ops through the history-v1 API of the running
+# Overleaf pod - it does not need the overleaf-data PVC and must NOT run
+# the normal entrypoint.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: overleaf-history-flush-all
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: overleaf
+    app.kubernetes.io/part-of: overleaf
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: overleaf-history-flush
+            app.kubernetes.io/part-of: overleaf
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: Never
+          containers:
+            - name: flush-all
+              image: overleafcep/sharelatex:6.2.0-ext-v5.0
+              imagePullPolicy: IfNotPresent
+              workingDir: /overleaf/services/project-history
+              command: ["node", "scripts/flush_all.js"]
+              env:
+                - name: OVERLEAF_MONGO_URL
+                  value: "mongodb://mongo:27017/sharelatex?replicaSet=overleaf"
+                - name: OVERLEAF_REDIS_HOST
+                  value: "redis"
+                - name: REDIS_HOST
+                  value: "redis"
+                - name: OVERLEAF_CONFIG
+                  value: "/etc/overleaf/settings.js"
+                - name: NODE_ENV
+                  value: "production"
+              envFrom:
+                - secretRef:
+                    name: overleaf-secrets
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi

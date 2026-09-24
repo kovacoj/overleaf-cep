@@ -32,7 +32,9 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
-      terminationGracePeriodSeconds: 60
+      # generous grace period: the SIGTERM trap flushes document-updater and
+      # project-history queues to MongoDB before exit (see entrypoint)
+      terminationGracePeriodSeconds: 90
       containers:
         - name: sharelatex
           image: overleafcep/sharelatex:6.2.0-ext-v5.0
@@ -118,6 +120,26 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+          # history maintenance scheduler: calls project-history on loopback
+          # (127.0.0.1:3054) from the same pod - see overleaf-configmap-entrypoint.yaml
+        - name: history-cron
+          image: overleafcep/sharelatex:6.2.0-ext-v5.0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/entrypoint/history-cron.sh"]
+          volumeMounts:
+            - name: entrypoint
+              mountPath: /entrypoint
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
       volumes:
         - name: entrypoint
           configMap:
