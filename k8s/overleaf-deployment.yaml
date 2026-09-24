@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overleaf
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: overleaf
+    app.kubernetes.io/part-of: overleaf
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: overleaf
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: overleaf
+        app.kubernetes.io/part-of: overleaf
+    spec:
+      # PodSecurity "restricted" is enforced in this namespace. The stock
+      # sharelatex image runs as root (phusion my_init), so we run as
+      # www-data (uid 33) with a ConfigMap entrypoint that replaces my_init.
+      # The base image chowns /var/lib/overleaf and /var/log/overleaf to
+      # www-data; fsGroup 33 makes the PVC group-writable.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: sharelatex
+          image: overleafcep/sharelatex:6.2.0-ext-v5.0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/entrypoint/entrypoint.sh"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: OVERLEAF_APP_NAME
+              value: "Our Overleaf Instance"
+            - name: OVERLEAF_SITE_URL
+              value: "https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz"
+            - name: OVERLEAF_MONGO_URL
+              value: "mongodb://mongo:27017/sharelatex?replicaSet=overleaf"
+            - name: OVERLEAF_REDIS_HOST
+              value: "redis"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: ENABLED_LINKED_FILE_TYPES
+              value: "project_file,project_output_file,zotero"
+            - name: ENABLE_CONVERSIONS
+              value: "true"
+            - name: EMAIL_CONFIRMATION_DISABLED
+              value: "true"
+            - name: GITHUB_SYNC_ENABLED
+              value: "true"
+            # Needed by the non-root entrypoint (normally set by the image
+            # env / phusion startup):
+            - name: WEB_API_USER
+              value: "overleaf"
+            - name: OVERLEAF_CONFIG
+              value: "/etc/overleaf/settings.js"
+            - name: NODE_ENV
+              value: "production"
+          envFrom:
+            - secretRef:
+                name: overleaf-secrets
+          volumeMounts:
+            - name: entrypoint
+              mountPath: /entrypoint
+            - name: nginx-run
+              mountPath: /run
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-conf
+              mountPath: /nginx-conf
+            - name: nginx-body
+              mountPath: /var/lib/nginx
+            - name: overleaf-data
+              mountPath: /var/lib/overleaf
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 3Gi
+          # Startup includes waiting for mongo primary + running migrations;
+          # 36 x 10s = 6 minutes budget.
+          startupProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: entrypoint
+          configMap:
+            name: overleaf-entrypoint
+            defaultMode: 0755
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}
+        - name: nginx-body
+          emptyDir: {}
+        - name: overleaf-data
+          persistentVolumeClaim:
+            claimName: overleaf-data

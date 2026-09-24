@@ -1,0 +1,38 @@
+# Follows the proven ingress pattern of other apps in kovacovsky-ns
+# (nginx class + cert-manager letsencrypt-prod, TLS secret named after host).
+#
+# proxy-body-size: Overleaf uploads (images/PDFs/zips) exceed the nginx
+#   default of 1m.
+# proxy-read/send-timeout: long-lived websocket connections (real-time
+#   editing) must not be dropped after the default 60s idle timeout.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: overleaf
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: overleaf
+    app.kubernetes.io/part-of: overleaf
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: overleaf
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+      secretName: overleaf-kovacovsky-ns-dyn-cloud-e-infra-cz-tls

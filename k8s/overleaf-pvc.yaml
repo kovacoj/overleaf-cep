@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: overleaf-data
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: overleaf
+    app.kubernetes.io/part-of: overleaf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: zfs-csi
+  resources:
+    requests:
+      storage: 20Gi

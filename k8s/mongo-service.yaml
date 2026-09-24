@@ -1,0 +1,24 @@
+# Headless service: gives the StatefulSet pod a stable DNS identity
+# (mongo-0.mongo.kovacovsky-ns.svc.cluster.local) that survives pod
+# recreation with a new IP. This is the name the replica set member is
+# registered under — a ClusterIP service name would break the replica set
+# whenever the pod IP changes. Clients using "mongodb://mongo:27017" still
+# work (the name resolves directly to the pod IP).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: mongo
+    app.kubernetes.io/part-of: overleaf
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+  selector:
+    app.kubernetes.io/name: mongo
