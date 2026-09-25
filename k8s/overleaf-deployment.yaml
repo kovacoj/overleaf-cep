@@ -55,13 +55,22 @@ spec:
             - name: REDIS_HOST
               value: "redis"
             - name: ENABLED_LINKED_FILE_TYPES
-              value: "project_file,project_output_file,zotero"
+              value: "project_file,project_output_file,url,zotero"
             - name: ENABLE_CONVERSIONS
               value: "true"
             - name: EMAIL_CONFIRMATION_DISABLED
               value: "true"
             - name: GITHUB_SYNC_ENABLED
               value: "true"
+            # CE+ extras: Pandoc conversions (requires pandoc in the image,
+            # added with the derived image), template gallery, import from
+            # external URL (linked-url-proxy, already running in-pod)
+            - name: ENABLE_PANDOC_CONVERSIONS
+              value: "true"
+            - name: OVERLEAF_TEMPLATE_GALLERY
+              value: "true"
+            - name: OVERLEAF_TEMPLATES_USER_ID
+              value: "6ab59b3a3ed6a4448d482fb1"
             # Needed by the non-root entrypoint (normally set by the image
             # env / phusion startup):
             - name: WEB_API_USER
