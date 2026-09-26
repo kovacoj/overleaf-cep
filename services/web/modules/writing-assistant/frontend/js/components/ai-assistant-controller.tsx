@@ -1,0 +1,387 @@
+/**
+ * AI assistant controller: modal UI opened by the editor selection tooltip
+ * (window event "editor:ai-assistant") or the compile-error log action.
+ *
+ * Flow: user picks an action -> modal opens with the selected text ->
+ * explicit Run streams the response (SSE) from the Overleaf backend
+ * (POST /user/ai/:action), which uses the user's own e-INFRA API token.
+ * Mutating results are shown as a word-level diff and applied only on
+ * Accept. Cancel aborts the in-flight request.
+ */
+import React, { useCallback, useEffect, useState } from 'react'
+import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
+import { AI_EVENT } from '../extensions/ai-selector'
+
+type Request = {
+  action: string
+  from: number
+  to: number
+  text: string
+  error?: string
+  sourceLines?: string
+}
+
+const ACTION_TITLES: Record<string, string> = {
+  improve: 'Improve academic English',
+  concise: 'Make concise',
+  grammar: 'Fix grammar and style',
+  explain: 'Explain',
+  translate: 'Translate',
+  review: 'Review paragraph',
+  'latex-fix': 'Fix LaTeX',
+  'latex-explain': 'Explain LaTeX',
+  equation: 'Generate equation',
+  table: 'Generate table',
+  custom: 'Custom instruction',
+  'compile-error': 'Explain compilation error',
+}
+
+const TRANSLATE_LANGUAGES = ['English', 'Czech', 'Slovak', 'German', 'French', 'Polish', 'Spanish']
+
+// simple word-level diff (LCS) for the preview
+function diffWords(
+  a: string,
+  b: string
+): Array<{ text: string; removed?: boolean; added?: boolean }> {
+  const split = (s: string) => s.split(/(\s+)/).filter(part => part.length > 0)
+  const left = split(a)
+  const right = split(b)
+  const n = left.length
+  const m = right.length
+  if (n * m > 250000) {
+    return [{ text: a, removed: true }, { text: b, added: true }]
+  }
+  const table: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array<number>(m + 1).fill(0)
+  )
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      table[i][j] =
+        left[i] === right[j]
+          ? table[i + 1][j + 1] + 1
+          : Math.max(table[i + 1][j], table[i][j + 1])
+    }
+  }
+  const result: Array<{ text: string; removed?: boolean; added?: boolean }> = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (left[i] === right[j]) {
+      result.push({ text: left[i] })
+      i++
+      j++
+    } else if (table[i + 1][j] >= table[i][j + 1]) {
+      result.push({ text: left[i], removed: true })
+      i++
+    } else {
+      result.push({ text: right[j], added: true })
+      j++
+    }
+  }
+  while (i < n) result.push({ text: left[i++], removed: true })
+  while (j < m) result.push({ text: right[j++], added: true })
+  return result
+}
+
+// SSE streaming POST: returns { promise, abort }
+function streamCompletion(
+  url: string,
+  body: Record<string, unknown>,
+  onDelta: (delta: string) => void
+): { promise: Promise<void>; abort: () => void } {
+  const controller = new AbortController()
+  const promise = (async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.message || `request failed (${response.status})`)
+    }
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('no response stream')
+    const decoder = new TextDecoder()
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (payload === '[DONE]') return
+        try {
+          const json = JSON.parse(payload)
+          const delta = json.choices?.[0]?.delta?.content
+          if (typeof delta === 'string') onDelta(delta)
+        } catch {
+          // ignore malformed keepalives
+        }
+      }
+    }
+  })()
+  return { promise, abort: () => controller.abort() }
+}
+
+export default function AIAssistantController() {
+  const { view } = useEditorViewContext()
+
+  const [request, setRequest] = useState<Request | null>(null)
+  const [instruction, setInstruction] = useState('')
+  const [language, setLanguage] = useState('English')
+  const [result, setResult] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showDiff, setShowDiff] = useState(true)
+  const [aborted, setAborted] = useState(false)
+
+  const close = useCallback(() => {
+    setRequest(null)
+    setResult('')
+    setError('')
+    setInstruction('')
+    setLoading(false)
+    setAborted(false)
+  }, [])
+
+  const run = useCallback(async () => {
+    if (!request) return
+    setLoading(true)
+    setError('')
+    setResult('')
+    setAborted(false)
+    const body: Record<string, unknown> = {
+      text: request.text,
+      latex: request.text,
+      language,
+      instruction,
+    }
+    if (request.action === 'compile-error') {
+      body.error = request.error
+      body.sourceLines = request.sourceLines
+    }
+    if (request.action === 'equation' || request.action === 'table') {
+      body.description = request.text
+    }
+    const { promise, abort } = streamCompletion(
+      `/user/ai/${request.action}`,
+      body,
+      delta => setResult(previous => previous + delta)
+    )
+    // store the abort fn on the component for the Cancel button
+    abortRef.current = abort
+    try {
+      await promise
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setAborted(true)
+      } else {
+        setError(err.message || 'AI request failed')
+      }
+    } finally {
+      setLoading(false)
+      abortRef.current = null
+    }
+  }, [request, instruction, language])
+
+  const abortRef = React.useRef<null | (() => void)>(null)
+
+  const applyResult = useCallback(() => {
+    if (!view || !request || !result) return
+    view.dispatch({
+      changes: { from: request.from, to: request.to, insert: result },
+      selection: { anchor: request.from + result.length },
+    })
+    view.focus()
+    close()
+  }, [view, request, result, close])
+
+  const insertResult = useCallback(() => {
+    if (!view || !result) return
+    const pos = request ? request.to : view.state.selection.main.head
+    view.dispatch({
+      changes: { from: pos, to: pos, insert: `\n${result}\n` },
+    })
+    view.focus()
+    close()
+  }, [view, request, result, close])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      if (detail.from == null || detail.to == null) return
+      const text = view ? view.state.sliceDoc(detail.from, detail.to) : ''
+      setResult('')
+      setError('')
+      setInstruction('')
+      setRequest({
+        action: detail.action,
+        from: detail.from,
+        to: detail.to,
+        text,
+        error: detail.error,
+        sourceLines: detail.sourceLines,
+      })
+    }
+    window.addEventListener(AI_EVENT, handler)
+    return () => window.removeEventListener(AI_EVENT, handler)
+  }, [view])
+
+  if (!request) return null
+
+  const isGenerate = request.action === 'equation' || request.action === 'table'
+  const isCompileError = request.action === 'compile-error'
+  const isReview =
+    request.action === 'review' ||
+    request.action === 'explain' ||
+    request.action === 'latex-explain'
+  const title = ACTION_TITLES[request.action] || 'AI assistant'
+
+  return (
+    <div className="modal in" style={{ display: 'block' }}>
+      <div className="modal-dialog modal-lg" role="document">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h4 className="modal-title">AI: {title}</h4>
+            <button className="close" onClick={close} aria-label="Close">
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+          <div className="modal-body">
+            <p className="small text-muted">
+              Sent to the e-INFRA CZ LLM service using your personal API
+              token, only for this explicit request.
+            </p>
+            {isCompileError && (
+              <pre className="ai-assistant-error small">{request.error}</pre>
+            )}
+            {!isCompileError && (
+              <details>
+                <summary className="small">
+                  {isGenerate ? 'Description / request' : 'Selected text'}
+                </summary>
+                <pre className="small">{request.text}</pre>
+              </details>
+            )}
+
+            {request.action === 'custom' && (
+              <textarea
+                className="form-control"
+                rows={2}
+                placeholder="Instruction, e.g. rewrite in passive voice"
+                value={instruction}
+                onChange={e => setInstruction(e.target.value)}
+              />
+            )}
+            {request.action === 'translate' && (
+              <select
+                className="form-control"
+                value={language}
+                onChange={e => setLanguage(e.target.value)}
+              >
+                {TRANSLATE_LANGUAGES.map(l => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {loading && (
+              <div className="loading">
+                <div
+                  className="spinner-border spinner-border-sm"
+                  role="status"
+                  aria-hidden="true"
+                />
+                &nbsp;Thinking… <span className="small text-muted">(streaming)</span>
+              </div>
+            )}
+            {aborted && (
+              <div className="small text-muted">Cancelled.</div>
+            )}
+
+            {error && (
+              <div className="alert alert-danger small" role="alert">
+                {error}
+              </div>
+            )}
+
+            {result && (
+              <>
+                {isReview || isCompileError || isGenerate ? (
+                  <pre className="ai-assistant-result small">{result}</pre>
+                ) : (
+                  <>
+                    <div className="small mb-1">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showDiff}
+                          onChange={e => setShowDiff(e.target.checked)}
+                        />
+                        &nbsp;Show changes
+                      </label>
+                    </div>
+                    {showDiff ? (
+                      <pre className="ai-assistant-result small">
+                        {diffWords(request.text, result).map((part, idx) => (
+                          <span
+                            key={idx}
+                            className={
+                              part.removed
+                                ? 'ai-assistant-diff-removed'
+                                : part.added
+                                  ? 'ai-assistant-diff-added'
+                                  : undefined
+                            }
+                          >
+                            {part.text}
+                          </span>
+                        ))}
+                      </pre>
+                    ) : (
+                      <pre className="ai-assistant-result small">{result}</pre>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <div className="modal-footer">
+            {loading ? (
+              <button
+                className="btn btn-secondary"
+                onClick={() => abortRef.current?.()}
+              >
+                Cancel
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={run}>
+                {result ? 'Run again' : 'Run'}
+              </button>
+            )}
+            {result && !loading && !isReview && !isCompileError && !isGenerate && (
+              <button className="btn btn-success" onClick={applyResult}>
+                Accept (replace selection)
+              </button>
+            )}
+            {result && !loading && isGenerate && (
+              <button className="btn btn-success" onClick={insertResult}>
+                Insert
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={close}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

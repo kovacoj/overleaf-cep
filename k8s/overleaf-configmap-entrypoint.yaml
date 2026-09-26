@@ -60,6 +60,13 @@ data:
       > /nginx-conf/sites-enabled/overleaf.conf
     sed 's/listen 8080;/listen 8081;/' /etc/nginx/sites-enabled/clsi-nginx.conf \
       > /nginx-conf/sites-enabled/clsi-nginx.conf
+    # Pandoc conversion downloads: the output-file URLs use the conversion
+    # UUID (hex with dashes) as the "project" segment, but the stock
+    # location regexes only accept undashed hex. Allow dashes so
+    # /project/<uuid>/build/.../output/... routes to clsi-nginx.
+    sed -i -E 's/\[0-9a-f\]\+/[0-9a-f-]+/g' \
+      /nginx-conf/sites-enabled/overleaf.conf \
+      /nginx-conf/sites-enabled/clsi-nginx.conf
     # vhost-extras include path must exist for nginx -t to pass
     mkdir -p /nginx-conf/vhost-extras/overleaf
     sed -i 's|/etc/nginx/vhost-extras/|/nginx-conf/vhost-extras/|g' /nginx-conf/sites-enabled/overleaf.conf

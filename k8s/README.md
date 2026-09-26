@@ -18,6 +18,62 @@ CERIT catalog chart (which is no longer used or installed).
 Do **not** upgrade to Overleaf 6.3 yet; the CE+ 6.3 port is still
 undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 
+## Writing assistant (grammar + AI)
+
+The `writing-assistant` CE+ module (in the custom image
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10`, built from
+`k8s/image/Dockerfile`) adds:
+
+1. **Grammar/style checking** via a self-hosted LanguageTool
+   (`languagetool.yaml`, ClusterIP-only, backend-proxied at
+   `POST /user/writing/grammar`). LaTeX-aware prose projection uses the
+   CodeMirror Lezer syntax tree (comments/math/verbatim excluded) plus a
+   command-level scanner; checks are debounced and cached per segment.
+   Settings: editor settings → spell-check tab (Off / Grammar only /
+   Grammar and style, language). Hunspell spelling remains untouched.
+2. **AI actions** via each user's **own e-INFRA CZ LLM API key**
+   (`https://llm.ai.e-infra.cz/v1`). Account Settings → AI Assistant:
+   paste your personal key (generated at chat.ai.e-infra.cz, Settings →
+   Account → API keys), pick a model (discovered dynamically via
+   `/v1/models`). The key is stored **encrypted** in MongoDB
+   (`writingAssistantSettings` collection) using the `AI_TOKEN_CIPHER_PASSWORD`
+   secret; it is never returned to the browser, logged, or shared between
+   users. AI requests are streamed (SSE) through the Overleaf backend
+   (`POST /user/ai/:action`) and happen **only on explicit user action**.
+   Editor: select text → AI menu (improve / concise / grammar / translate /
+   explain / review / LaTeX fix+explain / equation / table / custom);
+   compile errors get an "Explain" action in the log. Mutating results
+   show a diff and apply only on Accept.
+
+Build and deploy the custom image:
+
+```bash
+docker build -f k8s/image/Dockerfile \
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10
+# then update the image in overleaf-deployment.yaml and
+# overleaf-history-flush-all-cronjob.yaml and kubectl apply
+```
+
+## Zotero
+
+The CE+ Zotero module is compiled into the image. To activate it, register
+an OAuth application at https://www.zotero.org/oauth/apps with callback:
+
+```text
+https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz/user/zotero/oauth/callback
+```
+
+then fill `ZOTERO_CLIENT_KEY` and `ZOTERO_CLIENT_SECRET` in the
+`overleaf-secrets` secret (read-only access to personal + group libraries
+is requested; `ZOTERO_TOKEN_CIPHER_PASSWORD` is already set):
+
+```bash
+kubectl patch secret overleaf-secrets -n kovacovsky-ns \
+  -p '{"stringData":{"ZOTERO_CLIENT_KEY":"<key>","ZOTERO_CLIENT_SECRET":"<secret>"}}'
+kubectl rollout restart deployment/overleaf -n kovacovsky-ns
+```
+
 ## GitHub Sync
 
 Requires the secret `overleaf-secrets` with keys:

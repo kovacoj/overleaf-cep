@@ -1063,10 +1063,24 @@ module.exports = {
       ),
     ],
     contactUsModal: [],
-    sourceEditorExtensions: [],
+    sourceEditorExtensions: [
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/extensions/grammar-assistant'
+      ),
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/extensions/ai-selector'
+      ),
+    ],
     sourceEditorVisualExtensions: [],
     sourceEditorComponents: [],
-    pdfLogEntryHeaderActionComponents: [],
+    pdfLogEntryHeaderActionComponents: [
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/components/ai-log-entry-action.tsx'
+      ),
+    ],
     pdfLogEntryComponents: [],
     pdfLogEntriesComponents: [],
     pdfPreviewPromotions: [],
@@ -1088,10 +1102,19 @@ module.exports = {
         __dirname,
         '../modules/reference-picker/frontend/components/reference-picker-controller.tsx'
       ),
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/components/ai-assistant-controller.tsx'
+      ),
     ],
     mainEditorLayoutPanels: [],
     pythonRunner: [],
-    langFeedbackLinkingWidgets: [],
+    langFeedbackLinkingWidgets: [
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/components/ai-account-settings'
+      ),
+    ],
     labsExperiments: [],
     integrationLinkingWidgets: [
       Path.resolve(
@@ -1189,7 +1212,12 @@ module.exports = {
     ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
-    settingsModalSpellcheckSections: [],
+    settingsModalSpellcheckSections: [
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/components/writing-assistant-setting'
+      ),
+    ],
     editorFloatingMenuActions: [],
     errorLogsComponents: [],
     referenceIndices: [
@@ -1221,6 +1249,7 @@ module.exports = {
     'git-bridge',
     'github-sync',
     'zotero',
+    'writing-assistant',
   ],
   viewIncludes: {},
 

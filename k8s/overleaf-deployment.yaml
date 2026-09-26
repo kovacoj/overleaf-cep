@@ -37,7 +37,7 @@ spec:
       terminationGracePeriodSeconds: 90
       containers:
         - name: sharelatex
-          image: overleafcep/sharelatex:6.2.0-ext-v5.0
+          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "/entrypoint/entrypoint.sh"]
           ports:
@@ -71,6 +71,16 @@ spec:
               value: "true"
             - name: OVERLEAF_TEMPLATES_USER_ID
               value: "6ab59b3a3ed6a4448d482fb1"
+            # Writing assistant: LanguageTool grammar/style + per-user
+            # e-INFRA AI actions (token stored encrypted per user)
+            - name: WRITING_ASSISTANT_ENABLED
+              value: "true"
+            - name: LANGUAGETOOL_URL
+              value: "http://languagetool:8081"
+            - name: E_INFRA_LLM_BASE_URL
+              value: "https://llm.ai.e-infra.cz/v1"
+            - name: E_INFRA_LLM_DEFAULT_MODEL
+              value: "mini"
             # Needed by the non-root entrypoint (normally set by the image
             # env / phusion startup):
             - name: WEB_API_USER
@@ -132,7 +142,7 @@ spec:
           # history maintenance scheduler: calls project-history on loopback
           # (127.0.0.1:3054) from the same pod - see overleaf-configmap-entrypoint.yaml
         - name: history-cron
-          image: overleafcep/sharelatex:6.2.0-ext-v5.0
+          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "/entrypoint/history-cron.sh"]
           volumeMounts:
