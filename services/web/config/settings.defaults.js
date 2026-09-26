@@ -1226,7 +1226,12 @@ module.exports = {
         '../modules/reference-picker/frontend/reference-index/advanced-reference-index.ts'
       ),
     ],
-    railEntries: [],
+    railEntries: [
+      Path.resolve(
+        __dirname,
+        '../modules/research-library/frontend/js/rail-entry.tsx'
+      ),
+    ],
     railPopovers: [],
     railActions: [],
     railModals: [],
@@ -1250,6 +1255,7 @@ module.exports = {
     'github-sync',
     'zotero',
     'writing-assistant',
+    'research-library',
   ],
   viewIncludes: {},
 

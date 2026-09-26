@@ -21,7 +21,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s12`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -49,11 +49,28 @@ Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s12 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s12
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```
+
+## Research Library
+
+The `research-library` module adds a personal, project-independent
+bibliography (rail panel "Research Library" in the editor):
+
+- add references by pasting BibTeX (deduplicated by DOI / arXiv id /
+  normalized title) or by resolving a DOI / arXiv id / title via Crossref
+  and the arXiv API
+- search the library; click a title to insert `\cite{key}` at the cursor
+- "library.bib → project" materializes the whole library into the current
+  project as `library.bib` (created on first use, updated in place after)
+- `GET /user/research-library/references/export` downloads the full .bib
+
+Data lives in MongoDB (`researchLibraryReferences`), one personal scope
+per user. Group scopes, shared macros/figures and versioned linked files
+are future extensions (see the research-workspace brief).
 
 ## Zotero
 

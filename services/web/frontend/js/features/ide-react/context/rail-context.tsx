@@ -23,6 +23,7 @@ export type RailTabKey =
   | 'review-panel'
   | 'chat'
   | 'full-project-search'
+  | 'research-library'
   | 'dimensions'
   | 'workbench'
 

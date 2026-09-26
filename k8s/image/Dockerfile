@@ -1,8 +1,8 @@
 # Derived image: stock CE+ 6.2.0-ext-v5.0 + writing-assistant + pandoc.
 #
 # Build from the repository root:
-#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10 .
-#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s10
+#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s12 .
+#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s12
 #
 # Layering on the published CE+ image (instead of rebuilding from
 # sharelatex/sharelatex-base) keeps everything except our own changes
@@ -27,8 +27,9 @@ RUN apt-get update \
     && tlmgr install unicode-math xcolor fontspec upquote microtype \
        parskip xurl footnotehyper selnolig csquotes luatexbase luaotfload ctablestack
 
-# custom CE+ module
+# custom CE+ modules
 COPY services/web/modules/writing-assistant /overleaf/services/web/modules/writing-assistant
+COPY services/web/modules/research-library /overleaf/services/web/modules/research-library
 
 # module registrations (sourceEditorExtensions, settings modal, editor
 # modals, pdf log entry actions, account-settings linking widget)
