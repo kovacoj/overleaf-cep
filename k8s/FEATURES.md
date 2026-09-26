@@ -32,9 +32,9 @@ Legend for "Test result":
 | Git Bridge (git clone/push) | yes | **no** (`GIT_BRIDGE_ENABLED` unset) | no | git-bridge service (not deployed) | no | DEFERRED — needs the git-bridge service running + env wiring |
 | Zotero | yes | wired (`zotero` in linked types; env + cipher secret plumbed) | yes — Zotero OAuth app **not yet registered** | zotero.org | no | BLOCKED-ZOTERO-APP — module activates when `ZOTERO_CLIENT_KEY/SECRET` are filled in `overleaf-secrets`; callback must be registered at zotero.org |
 | Multilingual spell checking (Hunspell) | yes | yes | no | no | no | PRESENT — 215 dictionary files (~107 languages incl. cs, sk, de, fr, pl, en-GB/US) shipped; client-side; selection/underline/learn-word are browser UI |
-| DOCX/Markdown import + export | yes | **yes** (`ENABLE_PANDOC_CONVERSIONS=true`) | no | no | **pandoc binary missing from stock image** | BLOCKED-DERIVED-IMAGE — route + flag verified; conversion executed by CLSI requires `pandoc` in the image → derived image (Phase 2) |
-| Grammar/style checking (LanguageTool) | no (not in CE+) | Phase 2 | no (self-hosted) | LanguageTool ClusterIP | **yes — new module** | Phase 2 |
-| AI assistant | no (only SaaS remnants) | Phase 3 | yes (OpenAI-compatible key) | `overleaf-ai` ClusterIP | **yes — new module** | Phase 3 |
+| DOCX/Markdown import + export | yes | **yes** (`ENABLE_PANDOC_CONVERSIONS=true` + pandoc/zip/TeX packages in custom image) | no | no | custom image | **PASS** — md→project, docx→project, project→docx (valid Word file), project→md (zip) all exercised; imported projects compile (lualatex); nginx UUID fix for conversion downloads |
+| Grammar/style checking (LanguageTool) | added | **yes** (`WRITING_ASSISTANT_ENABLED=true`, custom image) | no (self-hosted) | LanguageTool ClusterIP | writing-assistant module | **PASS** — `POST /user/writing/grammar` verified with match parity vs raw LanguageTool; editor bundle ships decorations+tooltip (browser click-through pending) |
+| AI assistant (per-user e-INFRA LLM) | added | **yes** (custom image) | per-user e-INFRA API key (Account Settings) | llm.ai.e-infra.cz | writing-assistant module | **PARTIAL** — token validation (invalid → 400), status/models/improve verified with graceful no-token 404s; real-key E2E + streaming + diff UI need a user key |
 | Registration page | yes | no (disabled by default) | no | no | no | DEFERRED — enable with `OVERLEAF_ENABLE_REGISTRATION_PAGE=true` when wanted |
 | Admin tools | yes | yes | no | no | no | PRESENT — QA account sees admin pages (real admin: `kovacoj1@gmail.com`) |
 | User activation / invite | yes | yes | no | SMTP (not configured) | no | PASS — activation URL flow exercised (email logged, not sent) |
@@ -59,11 +59,11 @@ Template gallery             PASS
 GitHub Sync                  PENDING-USER (bidirectional sync test)
 Git Bridge                   DEFERRED (service not deployed)
 Multilingual spellcheck      PRESENT (assets verified, browser UI)
-LanguageTool grammar         Phase 2
-DOCX/Markdown conversions    BLOCKED (pandoc missing in stock image)
-AI rewrite                   Phase 3
-AI compile-error help        Phase 3
-AI equation/table tools      Phase 3
+LanguageTool grammar         PASS
+DOCX/Markdown conversions    PASS
+AI rewrite                   PARTIAL (needs user e-INFRA key)
+AI compile-error help        PARTIAL (needs user e-INFRA key)
+AI equation/table tools      PARTIAL (needs user e-INFRA key)
 LDAP                         AVAILABLE / not configured
 OIDC                         AVAILABLE / not configured
 SAML                         AVAILABLE / not configured
