@@ -21,7 +21,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s19`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -51,8 +51,8 @@ Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s19 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s19
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```

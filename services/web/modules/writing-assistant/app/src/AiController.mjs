@@ -529,10 +529,183 @@ async function literatureSearch(req, res) {
   }
 }
 
+// POST /user/ai/missing-citations {text}
+// Scan text for claims that would typically require a citation.
+// Suggestions only - nothing is inserted automatically.
+async function missingCitations(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const { text } = req.body ?? {}
+  if (typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ message: 'text is required' })
+  }
+  try {
+    let claims = null
+    for (let attempt = 0; attempt < 2 && !claims; attempt++) {
+      const { content } = await _completion(
+        userId,
+        [
+          {
+            role: 'system',
+            content:
+              'You are an academic reviewer. Identify statements in the given text that would typically require a citation in a scholarly paper (established results, factual claims, attributions of methods, "it is known" claims). Do NOT flag the author\'s own contributions, hypotheses, or descriptions of their own work. Respond ONLY with JSON: {"claims": [{"quote": "exact short quote from the text", "classification": "probably-needs-citation" | "possibly-needs-citation" | "likely-common-knowledge", "suggestion": "what kind of source would fit"}]}. Quote at most 15 words per claim. Return at most 10 claims.',
+          },
+          { role: 'user', content: text.slice(0, 30000) },
+        ],
+        0.2
+      )
+      const parsed = extractJson(content)
+      if (parsed && Array.isArray(parsed.claims)) {
+        claims = parsed.claims
+          .filter(
+            c =>
+              c &&
+              typeof c.quote === 'string' &&
+              typeof c.classification === 'string'
+          )
+          .slice(0, 10)
+          .map(c => ({
+            quote: c.quote,
+            classification: c.classification,
+            suggestion: typeof c.suggestion === 'string' ? c.suggestion : '',
+          }))
+      }
+    }
+    if (!claims) {
+      return res
+        .status(502)
+        .json({ message: 'could not parse the model response' })
+    }
+    res.json({ claims })
+  } catch (err) {
+    res.status(err.statusCode || 502).json({ message: err.message })
+  }
+}
+
+// POST /user/ai/verify-citations {text}
+// For each \cite{...} in the text, check whether the cited library entry
+// (title + abstract) plausibly supports the claim it is attached to.
+// Cautious verdicts: abstract-only coverage is reported as insufficient
+// evidence, never as a mismatch.
+async function verifyCitations(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const { text } = req.body ?? {}
+  if (typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ message: 'text is required' })
+  }
+
+  // collect citations with surrounding context
+  const contexts = []
+  const regex = /\\cite[tp]?\{([^}]*)\}/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const keys = match[1].split(',').map(k => k.trim()).filter(Boolean)
+    const from = Math.max(0, match.index - 250)
+    const to = Math.min(text.length, match.index + match[0].length + 250)
+    for (const key of keys.slice(0, 3)) {
+      contexts.push({ key, context: text.slice(from, to) })
+    }
+    if (contexts.length >= 15) break
+  }
+
+  if (contexts.length === 0) {
+    return res.json({ checks: [] })
+  }
+
+  try {
+    // fetch library entries for the cited keys
+    const collection = await getCollectionInternal(
+      'researchLibraryReferences'
+    )
+    const entries = await collection
+      .find({ userId: String(userId) })
+      .toArray()
+    const byKey = new Map(entries.map(e => [e.key, e]))
+
+    const checks = []
+    const toVerify = []
+    for (const { key, context } of contexts) {
+      const entry = byKey.get(key)
+      if (!entry) {
+        checks.push({
+          key,
+          verdict: 'not-in-library',
+          note: 'The cited key is not in your research library.',
+          context,
+        })
+      } else {
+        toVerify.push({
+          key,
+          title: entry.title || '',
+          abstract: (entry.abstract || '').slice(0, 500),
+          context,
+        })
+      }
+    }
+
+    if (toVerify.length > 0) {
+      let verdicts = null
+      for (let attempt = 0; attempt < 2 && !verdicts; attempt++) {
+        const { content } = await _completion(
+          userId,
+          [
+            {
+              role: 'system',
+              content:
+                'You are an academic citation verifier. For each numbered item you get a claim from a manuscript (with context) and the cited work (title and, when available, abstract). Judge whether the cited source supports the claim it is attached to. Respond ONLY with JSON: {"verdicts": [{"index": 0, "verdict": "supported" | "partially-supported" | "insufficient-evidence" | "potential-mismatch", "note": "one sentence"}]}. Be cautious: if only a title/abstract is available and it does not clearly cover the claim, use "insufficient-evidence" rather than "potential-mismatch".',
+            },
+            {
+              role: 'user',
+              content: toVerify
+                .map(
+                  (item, index) =>
+                    `[${index}] Claim/context: "${item.context.replace(/\s+/g, ' ').slice(0, 400)}"\n    Cited: ${item.key} — ${item.title}${item.abstract ? `\n    Abstract: ${item.abstract}` : ' (no abstract available)'}`
+                )
+                .join('\n\n'),
+            },
+          ],
+          0.2
+        )
+        const parsed = extractJson(content)
+        if (parsed && Array.isArray(parsed.verdicts)) {
+          verdicts = parsed.verdicts
+        }
+      }
+      if (verdicts) {
+        toVerify.forEach((item, index) => {
+          const verdict = verdicts.find(v => v.index === index) || {}
+          checks.push({
+            key: item.key,
+            title: item.title,
+            verdict: verdict.verdict || 'insufficient-evidence',
+            note: typeof verdict.note === 'string' ? verdict.note : '',
+            context: item.context,
+          })
+        })
+      } else {
+        toVerify.forEach(item => {
+          checks.push({
+            key: item.key,
+            title: item.title,
+            verdict: 'unverified',
+            note: 'The model response could not be parsed.',
+            context: item.context,
+          })
+        })
+      }
+    }
+
+    res.json({ checks })
+  } catch (err) {
+    res.status(err.statusCode || 502).json({ message: err.message })
+  }
+}
+
 export default {
   runAction,
   librarySupport,
   literatureSearch,
+  missingCitations,
+  verifyCitations,
   status,
   saveToken,
   deleteToken,

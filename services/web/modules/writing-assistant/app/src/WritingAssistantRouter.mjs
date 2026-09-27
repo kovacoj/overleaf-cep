@@ -38,6 +38,8 @@ const AI_ACTIONS = [
 const AI_JSON_ACTIONS = [
   ['library-support', AiController.librarySupport],
   ['literature-search', AiController.literatureSearch],
+  ['missing-citations', AiController.missingCitations],
+  ['verify-citations', AiController.verifyCitations],
 ]
 
 export default {

@@ -36,6 +36,8 @@ const ACTION_TITLES: Record<string, string> = {
   custom: 'Custom instruction',
   'library-support': 'Support from my library',
   'literature-search': 'Find related papers',
+  'missing-citations': 'Missing citations check',
+  'verify-citations': 'Verify citations',
   'compile-error': 'Explain compilation error',
 }
 
@@ -160,6 +162,21 @@ export default function AIAssistantController() {
     }>
   >([])
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set())
+  const [citationClaims, setCitationClaims] = useState<
+    Array<{
+      quote: string
+      classification: string
+      suggestion: string
+    }>
+  >([])
+  const [citationChecks, setCitationChecks] = useState<
+    Array<{
+      key: string
+      title?: string
+      verdict: string
+      note: string
+    }>
+  >([])
 
   const close = useCallback(() => {
     setRequest(null)
@@ -171,6 +188,8 @@ export default function AIAssistantController() {
     setLibraryMatches([])
     setSearchResults([])
     setAddedKeys(new Set())
+    setCitationClaims([])
+    setCitationChecks([])
   }, [])
 
   const addToLibrary = useCallback(async (entry: Record<string, unknown>) => {
@@ -205,7 +224,9 @@ export default function AIAssistantController() {
     // structured, non-streaming actions
     if (
       request.action === 'library-support' ||
-      request.action === 'literature-search'
+      request.action === 'literature-search' ||
+      request.action === 'missing-citations' ||
+      request.action === 'verify-citations'
     ) {
       setLoading(true)
       setError('')
@@ -229,6 +250,16 @@ export default function AIAssistantController() {
           setLibraryMatches(data.matches || [])
           if (!(data.matches || []).length) {
             setError('No matching entries found in your library.')
+          }
+        } else if (request.action === 'missing-citations') {
+          setCitationClaims(data.claims || [])
+          if (!(data.claims || []).length) {
+            setError('No citation-worthy claims detected.')
+          }
+        } else if (request.action === 'verify-citations') {
+          setCitationChecks(data.checks || [])
+          if (!(data.checks || []).length) {
+            setError('No \\cite commands found in the selection.')
           }
         } else {
           setSearchResults(data.results || [])

@@ -83,6 +83,8 @@ const AI_ACTIONS: Array<{ action: string; label: string; title: string }> = [
   { action: 'custom', label: '…', title: 'Custom instruction' },
   { action: 'library-support', label: '📚', title: 'Support from my library' },
   { action: 'literature-search', label: '🔍', title: 'Find related papers (Crossref)' },
+  { action: 'missing-citations', label: '⚑', title: 'Missing citations check' },
+  { action: 'verify-citations', label: '✓c', title: 'Verify citations against library' },
 ]
 
 function createAISelectorView(from: number, to: number, hidden: boolean): TooltipView {
