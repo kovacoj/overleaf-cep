@@ -54,7 +54,10 @@ export default function AiAccountSettings() {
     try {
       const response = await fetch('/user/ai/token', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': getMeta('ol-csrfToken'),
+        },
         body: JSON.stringify({ token: token.trim() }),
       })
       const data = await response.json()
@@ -74,7 +77,10 @@ export default function AiAccountSettings() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch('/user/ai/token', { method: 'DELETE' })
+      const response = await fetch('/user/ai/token', {
+        method: 'DELETE',
+        headers: { 'x-csrf-token': getMeta('ol-csrfToken') },
+      })
       if (!response.ok) throw new Error('failed to delete token')
       setModels([])
       setMessage('Token deleted.')
@@ -91,7 +97,10 @@ export default function AiAccountSettings() {
     try {
       await fetch('/user/ai/model', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': getMeta('ol-csrfToken'),
+        },
         body: JSON.stringify({ model: newModel }),
       })
     } catch {

@@ -36,7 +36,7 @@ Legend for "Test result":
 | Research Library             PASS (foundation: personal scope, bibliography)
 Grammar/style checking (LanguageTool) | added | **yes** (`WRITING_ASSISTANT_ENABLED=true`, custom image) | no (self-hosted) | LanguageTool ClusterIP | writing-assistant module | **PASS** — `POST /user/writing/grammar` verified with match parity vs raw LanguageTool; editor bundle ships decorations+tooltip (browser click-through pending) |
 | Research Library (global bibliography) | added | **yes** (`RESEARCH_LIBRARY_ENABLED=true`, rail panel) | no | Crossref + arXiv APIs (lookups) | research-library module | **PASS** — add via BibTeX paste (dedup by title/DOI), DOI/arXiv/title live lookup, search, materialize library.bib into project (create + refresh), export; editor rail panel shipped in bundle |
-| AI assistant (per-user e-INFRA LLM) | added | **yes** (custom image) | per-user e-INFRA API key (Account Settings) | llm.ai.e-infra.cz | writing-assistant module | **PARTIAL** — token validation (invalid → 400), status/models/improve verified with graceful no-token 404s; real-key E2E + streaming + diff UI need a user key |
+| AI assistant (per-user e-INFRA LLM) | added | **yes** (custom image) | per-user e-INFRA API key (Account Settings) | llm.ai.e-infra.cz | writing-assistant module | **PASS** — real-key E2E: token stored+encrypted for admin, chat/review/improve streaming verified with correct academic output; rail panel (chat + document review + context selector); invalid tokens rejected |
 | Registration page | yes | no (disabled by default) | no | no | no | DEFERRED — enable with `OVERLEAF_ENABLE_REGISTRATION_PAGE=true` when wanted |
 | Admin tools | yes | yes | no | no | no | PRESENT — QA account sees admin pages (real admin: `kovacoj1@gmail.com`) |
 | User activation / invite | yes | yes | no | SMTP (not configured) | no | PASS — activation URL flow exercised (email logged, not sent) |
@@ -63,9 +63,9 @@ Git Bridge                   DEFERRED (service not deployed)
 Multilingual spellcheck      PRESENT (assets verified, browser UI)
 LanguageTool grammar         PASS
 DOCX/Markdown conversions    PASS
-AI rewrite                   PARTIAL (needs user e-INFRA key)
-AI compile-error help        PARTIAL (needs user e-INFRA key)
-AI equation/table tools      PARTIAL (needs user e-INFRA key)
+AI rewrite                   PASS (streaming E2E verified)
+AI compile-error help        PASS (endpoint verified)
+AI equation/table tools      PASS (endpoint verified)
 LDAP                         AVAILABLE / not configured
 OIDC                         AVAILABLE / not configured
 SAML                         AVAILABLE / not configured

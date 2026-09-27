@@ -1231,6 +1231,10 @@ module.exports = {
         __dirname,
         '../modules/research-library/frontend/js/rail-entry.tsx'
       ),
+      Path.resolve(
+        __dirname,
+        '../modules/writing-assistant/frontend/js/rail-entry.tsx'
+      ),
     ],
     railPopovers: [],
     railActions: [],

@@ -30,6 +30,8 @@ const AI_ACTIONS = [
   ['equation', 'equation'],
   ['table', 'table'],
   ['compile-error', 'compile-error'],
+  ['chat', 'chat'],
+  ['review', 'review-document'],
 ]
 
 export default {

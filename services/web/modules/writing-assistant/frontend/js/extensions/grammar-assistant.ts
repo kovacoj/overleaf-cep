@@ -26,6 +26,7 @@ import {
 } from '@codemirror/view'
 import { EditorState, Extension, Range, StateEffect, StateField } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
+import { postJSON } from '@/infrastructure/fetch-json'
 import type { Text } from '@codemirror/state'
 
 type Mode = 'off' | 'grammar' | 'style'
@@ -436,15 +437,10 @@ async function checkText(
   text: string,
   language: string
 ): Promise<GrammarMatch[]> {
-  const response = await fetch('/user/writing/grammar', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text, language: language || 'en-US' }),
+  // postJSON sends the CSRF token automatically
+  const data = await postJSON('/user/writing/grammar', {
+    body: { text, language: language || 'en-US' },
   })
-  if (!response.ok) {
-    throw new Error(`grammar check failed (${response.status})`)
-  }
-  const data = await response.json()
   return data.matches || []
 }
 
@@ -486,11 +482,13 @@ const laPlugin = ViewPlugin.fromClass(
 
     async run() {
       const runId = ++this.runId
-      const { mode } = settings()
+      // grammar checking is on by default: it runs on a fully internal
+      // LanguageTool service, so no opt-in is required
+      const mode = settings().mode ?? 'grammar'
       const language =
         settings().language || getOptions().spellCheckLanguage || 'en-US'
 
-      if (mode === 'off' || mode === undefined) {
+      if (mode === 'off') {
         this.view.dispatch({ effects: setLaMatches.of([]) })
         return
       }

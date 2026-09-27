@@ -24,6 +24,7 @@ export type RailTabKey =
   | 'chat'
   | 'full-project-search'
   | 'research-library'
+  | 'ai-assistant'
   | 'dimensions'
   | 'workbench'
 

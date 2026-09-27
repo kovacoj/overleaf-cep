@@ -21,7 +21,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s13`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s16`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -43,14 +43,16 @@ The `writing-assistant` CE+ module (in the custom image
    Editor: select text → AI menu (improve / concise / grammar / translate /
    explain / review / LaTeX fix+explain / equation / table / custom);
    compile errors get an "Explain" action in the log. Mutating results
-   show a diff and apply only on Accept.
+   show a diff and apply only on Accept. An "AI Assistant" rail panel
+   provides chat (context: selection / current file / none) and a
+   structured "Review document" action, both streamed.
 
 Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s13 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s13
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s16 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s16
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```

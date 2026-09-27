@@ -10,6 +10,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react'
 import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
+import getMeta from '@/utils/meta'
 import { AI_EVENT } from '../extensions/ai-selector'
 
 type Request = {
@@ -93,7 +94,10 @@ function streamCompletion(
   const promise = (async () => {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-csrf-token': getMeta('ol-csrfToken'),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     })

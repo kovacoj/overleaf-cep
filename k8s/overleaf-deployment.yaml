@@ -37,7 +37,7 @@ spec:
       terminationGracePeriodSeconds: 90
       containers:
         - name: sharelatex
-          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s13
+          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s16
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "/entrypoint/entrypoint.sh"]
           ports:
@@ -145,7 +145,7 @@ spec:
           # history maintenance scheduler: calls project-history on loopback
           # (127.0.0.1:3054) from the same pod - see overleaf-configmap-entrypoint.yaml
         - name: history-cron
-          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s13
+          image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s16
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "/entrypoint/history-cron.sh"]
           volumeMounts:

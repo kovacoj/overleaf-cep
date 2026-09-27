@@ -37,6 +37,10 @@ const SYSTEM_PROMPTS = {
     'You are a LaTeX expert. Generate the requested table in LaTeX (use booktabs style \\toprule/\\midrule/\\bottomrule where suitable). Return ONLY the LaTeX, no commentary or markdown fences.',
   'compile-error':
     'You are a LaTeX debugging expert. Explain the given compilation error, identify its likely cause in the provided source lines, and suggest a concrete fix. Respond with three short sections: Explanation, Likely cause, Suggested fix.',
+  chat:
+    'You are a helpful academic writing assistant embedded in a LaTeX editor. Answer questions about the provided document context concisely and precisely. When suggesting text changes, show them as LaTeX snippets or before/after examples rather than modifying anything. Preserve technical meaning, equations and citations.',
+  'review-document':
+    'You are a rigorous academic reviewer. Review the given LaTeX document. Structure your answer with these exact headings: Summary, Major issues, Minor issues, Questions for the author, Suggestions. Be specific and quote the relevant passages. Focus on clarity, methodology descriptions, mathematical rigor, consistency and academic style. Do not invent facts or references. Keep each section short and actionable.',
   custom:
     'You are an academic writing assistant working on LaTeX text. Follow the user instruction. PRESERVE LaTeX structure (citations, references, labels, math, commands) unless the instruction concerns it. Return ONLY the result text, no commentary.',
 }
@@ -100,6 +104,45 @@ function buildMessages(action, body) {
           role: 'user',
           content: `Compiler: ${body.compiler || 'pdfLaTeX'}\n\nError:\n${body.error || ''}\n\nNearby source lines:\n${body.sourceLines || ''}`,
         },
+      ]
+    case 'chat': {
+      // conversation history with optional document context
+      const history = Array.isArray(body.messages)
+        ? body.messages
+            .filter(
+              m =>
+                m &&
+                (m.role === 'user' || m.role === 'assistant') &&
+                typeof m.content === 'string' &&
+                m.content.length > 0
+            )
+            .slice(-20)
+            .map(m => ({ role: m.role, content: m.content.slice(0, 16000) }))
+        : []
+      if (history.length === 0) {
+        const error = new Error('messages is required')
+        error.statusCode = 400
+        throw error
+      }
+      const messages = [{ role: 'system', content: system }]
+      const context = typeof body.context === 'string' ? body.context : ''
+      if (context) {
+        messages.push({
+          role: 'user',
+          content: `Document context (for reference, do not repeat it):\n\n${context.slice(0, 40000)}`,
+        })
+        messages.push({
+          role: 'assistant',
+          content: 'Understood, I have the document context. How can I help?',
+        })
+      }
+      messages.push(...history)
+      return messages
+    }
+    case 'review-document':
+      return [
+        { role: 'system', content: system },
+        { role: 'user', content: (body.text || '').slice(0, 60000) },
       ]
     default:
       const error = new Error('unhandled action')

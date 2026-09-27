@@ -13,7 +13,7 @@ import { getCollectionInternal } from '../../../../app/src/infrastructure/mongod
 //   { userId, encryptedToken (encrypted {token}), model }
 
 const TOKEN_CIPHER_FILE = '/var/lib/overleaf/data/.ai-token-cipher.json'
-const TOKEN_CIPHER_LABEL = 'OL_CEP-AI-v1'
+const TOKEN_CIPHER_LABEL = 'OL_CEP_AI-v3'
 
 let encryptorInstance = null
 
