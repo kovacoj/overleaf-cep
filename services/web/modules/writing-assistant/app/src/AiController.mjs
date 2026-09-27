@@ -6,6 +6,7 @@ import AiTokenManager from './AiTokenManager.mjs'
 import EInfraClient from './EInfraClient.mjs'
 import { getCollectionInternal } from '../../../../app/src/infrastructure/mongodb.mjs'
 import { EInfraClientSync } from './EInfraClient.mjs'
+import { readPaperText } from '../../../research-library/app/src/PdfController.mjs'
 
 // AI actions for the writing assistant. Each narrow endpoint:
 //   1. requires an authenticated Overleaf user
@@ -39,6 +40,8 @@ const SYSTEM_PROMPTS = {
     'You are a LaTeX expert. Generate the requested table in LaTeX (use booktabs style \\toprule/\\midrule/\\bottomrule where suitable). Return ONLY the LaTeX, no commentary or markdown fences.',
   'compile-error':
     'You are a LaTeX debugging expert. Explain the given compilation error, identify its likely cause in the provided source lines, and suggest a concrete fix. Respond with three short sections: Explanation, Likely cause, Suggested fix.',
+  'ask-paper':
+    'You are an academic assistant answering questions about ONE specific paper whose full extracted text is provided. Ground every answer in the provided text; quote or paraphrase relevant passages and indicate roughly where they appear. If the text does not contain the answer, say so clearly instead of guessing. Never invent content.',
   chat:
     'You are a helpful academic writing assistant embedded in a LaTeX editor. Answer questions about the provided document or library context concisely and precisely. When referencing library items, cite them with their BibTeX keys (e.g. \\cite{key}); never invent references that are not in the provided context. When suggesting text changes, show them as LaTeX snippets or before/after examples rather than modifying anything. Preserve technical meaning, equations and citations.',
   'review-document':
@@ -140,6 +143,32 @@ async function buildMessages(action, body) {
           content: `Compiler: ${body.compiler || 'pdfLaTeX'}\n\nError:\n${body.error || ''}\n\nNearby source lines:\n${body.sourceLines || ''}`,
         },
       ]
+    case 'ask-paper': {
+      const { referenceId, question } = body
+      if (!referenceId || typeof question !== 'string' || !question.trim()) {
+        const error = new Error('referenceId and question are required')
+        error.statusCode = 400
+        throw error
+      }
+      const paper = await readPaperText(body._userId, referenceId)
+      if (!paper) {
+        const error = new Error('paper not found')
+        error.statusCode = 404
+        throw error
+      }
+      if (!paper.text) {
+        const error = new Error('no extracted text for this paper (upload the PDF first)')
+        error.statusCode = 404
+        throw error
+      }
+      return [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: `Paper: ${paper.entry.title || paper.entry.key}\n\nExtracted text:\n\n${paper.text.slice(0, 60000)}\n\nQuestion: ${question.slice(0, 2000)}`,
+        },
+      ]
+    }
     case 'chat': {
       // conversation history with optional document context
       const history = Array.isArray(body.messages)

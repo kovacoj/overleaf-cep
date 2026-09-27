@@ -4,6 +4,14 @@ import AuthorizationMiddleware from '../../../../app/src/Features/Authorization/
 import RateLimiterMiddleware from '../../../../app/src/Features/Security/RateLimiterMiddleware.mjs'
 import { RateLimiter } from '../../../../app/src/infrastructure/RateLimiter.mjs'
 import ResearchLibraryController from './ResearchLibraryController.mjs'
+import PdfController from './PdfController.mjs'
+import multer from 'multer'
+import Settings from '@overleaf/settings'
+
+const pdfUpload = multer({
+  dest: Settings.path.uploadFolder,
+  limits: { fileSize: 25 * 1024 * 1024 },
+})
 
 const readLimiter = new RateLimiter('research-library-read', {
   points: 120,
@@ -62,6 +70,33 @@ export default {
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(writeLimiter),
       expressify(ResearchLibraryController.deleteReference)
+    )
+
+    // PDFs attached to library entries (owner only)
+    webRouter.post(
+      '/user/research-library/references/:referenceId/pdf',
+      AuthenticationController.requireLogin(),
+      RateLimiterMiddleware.rateLimit(writeLimiter),
+      pdfUpload.single('qqfile'),
+      expressify(PdfController.uploadPdf)
+    )
+    webRouter.get(
+      '/user/research-library/references/:referenceId/pdf',
+      AuthenticationController.requireLogin(),
+      RateLimiterMiddleware.rateLimit(readLimiter),
+      expressify(PdfController.downloadPdf)
+    )
+    webRouter.get(
+      '/user/research-library/references/:referenceId/text',
+      AuthenticationController.requireLogin(),
+      RateLimiterMiddleware.rateLimit(readLimiter),
+      expressify(PdfController.getText)
+    )
+    webRouter.delete(
+      '/user/research-library/references/:referenceId/pdf',
+      AuthenticationController.requireLogin(),
+      RateLimiterMiddleware.rateLimit(writeLimiter),
+      expressify(PdfController.deletePdf)
     )
 
     webRouter.get(

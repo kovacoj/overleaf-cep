@@ -20,6 +20,7 @@ type Request = {
   text: string
   error?: string
   sourceLines?: string
+  referenceId?: string
 }
 
 const ACTION_TITLES: Record<string, string> = {
@@ -36,6 +37,7 @@ const ACTION_TITLES: Record<string, string> = {
   custom: 'Custom instruction',
   'library-support': 'Support from my library',
   'literature-search': 'Find related papers',
+  'ask-paper': 'Ask paper',
   'missing-citations': 'Missing citations check',
   'verify-citations': 'Verify citations',
   'compile-error': 'Explain compilation error',
@@ -169,6 +171,7 @@ export default function AIAssistantController() {
       suggestion: string
     }>
   >([])
+  const [paperQuestion, setPaperQuestion] = useState('')
   const [citationChecks, setCitationChecks] = useState<
     Array<{
       key: string
@@ -190,6 +193,7 @@ export default function AIAssistantController() {
     setAddedKeys(new Set())
     setCitationClaims([])
     setCitationChecks([])
+    setPaperQuestion('')
   }, [])
 
   const addToLibrary = useCallback(async (entry: Record<string, unknown>) => {
@@ -292,6 +296,10 @@ export default function AIAssistantController() {
     if (request.action === 'equation' || request.action === 'table') {
       body.description = request.text
     }
+    if (request.action === 'ask-paper') {
+      body.referenceId = request.referenceId
+      body.question = paperQuestion
+    }
     const { promise, abort } = streamCompletion(
       `/user/ai/${request.action}`,
       body,
@@ -311,7 +319,7 @@ export default function AIAssistantController() {
       setLoading(false)
       abortRef.current = null
     }
-  }, [request, instruction, language])
+  }, [request, instruction, language, paperQuestion])
 
   const abortRef = React.useRef<null | (() => void)>(null)
 
@@ -429,6 +437,16 @@ export default function AIAssistantController() {
                   </option>
                 ))}
               </select>
+            )}
+
+            {request.action === 'ask-paper' && (
+              <textarea
+                className="form-control"
+                rows={2}
+                placeholder="Ask a question about this paper…"
+                value={paperQuestion}
+                onChange={e => setPaperQuestion(e.target.value)}
+              />
             )}
 
             {loading && (

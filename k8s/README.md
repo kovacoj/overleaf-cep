@@ -21,7 +21,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -51,8 +51,8 @@ Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```
@@ -69,6 +69,8 @@ bibliography (rail panel "Research Library" in the editor):
 - "library.bib → project" materializes the whole library into the current
   project as `library.bib` (created on first use, updated in place after)
 - `GET /user/research-library/references/export` downloads the full .bib
+- PDFs can be attached to entries (stored on the PVC, text extracted
+  with pdftotext) and used for grounded AI "ask paper" questions
 
 Data lives in MongoDB (`researchLibraryReferences`), one personal scope
 per user. Group scopes, shared macros/figures and versioned linked files

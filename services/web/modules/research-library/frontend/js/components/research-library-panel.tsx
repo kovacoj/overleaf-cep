@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useProjectContext } from '@/shared/context/project-context'
 import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
 import getMeta from '@/utils/meta'
+import { AI_EVENT } from '../../../../writing-assistant/frontend/js/extensions/ai-selector'
 import OLButton from '@/shared/components/ol/ol-button'
 import Notification from '@/shared/components/notification'
 
@@ -21,12 +22,12 @@ type Reference = {
   doi?: string
   arxivId?: string
   source?: string
+  hasPdf?: boolean
 }
 
 export default function ResearchLibraryPanel() {
   const { projectId } = useProjectContext()
   const { view } = useEditorViewContext()
-  const csrf = getMeta('ol-csrfToken')
 
   const [references, setReferences] = useState<Reference[]>([])
   const [query, setQuery] = useState('')
@@ -34,6 +35,8 @@ export default function ResearchLibraryPanel() {
   const [bibtexText, setBibtexText] = useState('')
   const [showAdd, setShowAdd] = useState<'none' | 'lookup' | 'bibtex'>('none')
   const [busy, setBusy] = useState(false)
+  const [pdfUploadFor, setPdfUploadFor] = useState<string | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [linkStatus, setLinkStatus] = useState<{
@@ -82,7 +85,7 @@ export default function ResearchLibraryPanel() {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-csrf-token': csrf,
+          'x-csrf-token': getMeta('ol-csrfToken'),
         },
         body: JSON.stringify({ query: lookupQuery.trim() }),
       })
@@ -97,7 +100,7 @@ export default function ResearchLibraryPanel() {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            'x-csrf-token': csrf,
+            'x-csrf-token': getMeta('ol-csrfToken'),
           },
           body: JSON.stringify({ reference: data.reference }),
         }
@@ -118,7 +121,7 @@ export default function ResearchLibraryPanel() {
     } finally {
       setBusy(false)
     }
-  }, [lookupQuery, csrf, fetchReferences])
+  }, [lookupQuery, fetchReferences])
 
   const addBibtex = useCallback(async () => {
     if (!bibtexText.trim()) return
@@ -130,7 +133,7 @@ export default function ResearchLibraryPanel() {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-csrf-token': csrf,
+          'x-csrf-token': getMeta('ol-csrfToken'),
         },
         body: JSON.stringify({ bibtex: bibtexText }),
       })
@@ -149,21 +152,75 @@ export default function ResearchLibraryPanel() {
     } finally {
       setBusy(false)
     }
-  }, [bibtexText, csrf, fetchReferences])
+  }, [bibtexText, fetchReferences])
 
   const deleteReference = useCallback(
     async (referenceId: string) => {
       try {
         await fetch(`/user/research-library/references/${referenceId}`, {
           method: 'DELETE',
-          headers: { 'x-csrf-token': csrf },
+          headers: { 'x-csrf-token': getMeta('ol-csrfToken') },
         })
         await fetchReferences()
       } catch {
         setError('failed to delete')
       }
     },
-    [csrf, fetchReferences]
+    [fetchReferences]
+  )
+
+  const uploadPdf = useCallback(
+    (referenceId: string, file: File) => {
+      const body = new FormData()
+      body.append('qqfile', file)
+      fetch(`/user/research-library/references/${referenceId}/pdf`, {
+        method: 'POST',
+        headers: { 'x-csrf-token': getMeta('ol-csrfToken') },
+        body,
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (!data.hasPdf) throw new Error(data.message || 'upload failed')
+          setMessage(`PDF stored (${data.textChars || 0} chars of text)`)
+          return fetchReferences()
+        })
+        .catch(err => setError(err.message || 'upload failed'))
+    },
+    [fetchReferences]
+  )
+
+  const deletePdf = useCallback(
+    async (referenceId: string) => {
+      try {
+        await fetch(`/user/research-library/references/${referenceId}/pdf`, {
+          method: 'DELETE',
+          headers: { 'x-csrf-token': getMeta('ol-csrfToken') },
+        })
+        await fetchReferences()
+      } catch {
+        setError('failed to delete PDF')
+      }
+    },
+    [fetchReferences]
+  )
+
+  const askPaper = useCallback(
+    (reference: Reference) => {
+      if (!view) return
+      const pos = view.state.selection.main.head
+      window.dispatchEvent(
+        new CustomEvent(AI_EVENT, {
+          detail: {
+            action: 'ask-paper',
+            from: pos,
+            to: pos,
+            referenceId: reference._id,
+            text: reference.title || reference.key,
+          },
+        })
+      )
+    },
+    [view]
   )
 
   const insertCitation = useCallback(
@@ -190,7 +247,7 @@ export default function ResearchLibraryPanel() {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            'x-csrf-token': csrf,
+            'x-csrf-token': getMeta('ol-csrfToken'),
           },
           body: JSON.stringify({}),
         }
@@ -206,7 +263,7 @@ export default function ResearchLibraryPanel() {
     } finally {
       setBusy(false)
     }
-  }, [projectId, csrf, fetchLinkStatus])
+  }, [projectId, fetchLinkStatus])
 
   return (
     <div className="research-library-panel full-project-search">
@@ -317,6 +374,19 @@ export default function ResearchLibraryPanel() {
         <Notification type="info" content={message} onDismiss={() => setMessage('')} />
       )}
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file && pdfUploadFor) uploadPdf(pdfUploadFor, file)
+          e.target.value = ''
+          setPdfUploadFor(null)
+        }}
+      />
+
       <div className="research-library-results">
         {references.length === 0 ? (
           <div className="small text-muted">
@@ -365,6 +435,43 @@ export default function ResearchLibraryPanel() {
                       arXiv
                     </a>
                   ) : null}
+                  {reference.hasPdf ? (
+                    <>
+                      <a
+                        className="btn btn-link btn-xs ms-1"
+                        href={`/user/research-library/references/${reference._id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        PDF
+                      </a>
+                      <button
+                        className="btn btn-link btn-xs ms-1"
+                        title="Ask AI about this paper"
+                        onClick={() => askPaper(reference)}
+                      >
+                        ask
+                      </button>
+                      <button
+                        className="btn btn-link btn-xs ms-1"
+                        title="Remove the PDF"
+                        onClick={() => deletePdf(reference._id)}
+                      >
+                        ✕pdf
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="btn btn-link btn-xs ms-1"
+                      title="Attach a PDF"
+                      onClick={() => {
+                        setPdfUploadFor(reference._id)
+                        fileInputRef.current?.click()
+                      }}
+                    >
+                      +pdf
+                    </button>
+                  )}
                   <button
                     className="btn btn-link btn-xs ms-1"
                     title="Remove from library"

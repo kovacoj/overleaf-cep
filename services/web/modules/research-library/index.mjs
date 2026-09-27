@@ -27,6 +27,9 @@ if (process.env.RESEARCH_LIBRARY_ENABLED === 'true') {
       process.env.RESEARCH_LIBRARY_MAX_ENTRIES || '20000',
       10
     ),
+    pdfRoot:
+      process.env.RESEARCH_LIBRARY_PDF_ROOT ||
+      '/var/lib/overleaf/data/research-library',
   }
 
   ResearchLibraryModule = {

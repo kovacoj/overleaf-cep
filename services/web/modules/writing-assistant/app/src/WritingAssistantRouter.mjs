@@ -32,6 +32,7 @@ const AI_ACTIONS = [
   ['compile-error', 'compile-error'],
   ['chat', 'chat'],
   ['review', 'review-document'],
+  ['ask-paper', 'ask-paper'],
 ]
 
 // structured (non-streaming) AI actions

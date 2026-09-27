@@ -1,8 +1,8 @@
 # Derived image: stock CE+ 6.2.0-ext-v5.0 + writing-assistant + pandoc.
 #
 # Build from the repository root:
-#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20 .
-#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s20
+#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21 .
+#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21
 #
 # Layering on the published CE+ image (instead of rebuilding from
 # sharelatex/sharelatex-base) keeps everything except our own changes
@@ -21,7 +21,7 @@ FROM overleafcep/sharelatex:6.2.0-ext-v5.0
 # and the TeXLive packages required by pandoc's default LaTeX template
 # (the stock image ships only a minimal TeXLive subset)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends pandoc zip unzip \
+    && apt-get install -y --no-install-recommends pandoc zip unzip poppler-utils \
     && rm -rf /var/lib/apt/lists/* \
     && tlmgr update --self \
     && tlmgr install unicode-math xcolor fontspec upquote microtype \
