@@ -5,6 +5,7 @@ import SessionManager from '../../../../app/src/Features/Authentication/SessionM
 import AiTokenManager from './AiTokenManager.mjs'
 import EInfraClient from './EInfraClient.mjs'
 import { getCollectionInternal } from '../../../../app/src/infrastructure/mongodb.mjs'
+import { EInfraClientSync } from './EInfraClient.mjs'
 
 // AI actions for the writing assistant. Each narrow endpoint:
 //   1. requires an authenticated Overleaf user
@@ -339,8 +340,199 @@ async function setModel(req, res) {
   res.json({ model })
 }
 
+// Extract the first balanced JSON object from a model reply
+function extractJson(text) {
+  const start = text.indexOf('{')
+  if (start === -1) return null
+  let depth = 0
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    if (text[i] === '}') {
+      depth--
+      if (depth === 0) {
+        try {
+          return JSON.parse(text.slice(start, i + 1))
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
+async function _completion(userId, messages, temperature) {
+  const token = await AiTokenManager.getToken(userId)
+  if (!token) {
+    const error = new Error(
+      'No e-INFRA AI token configured. Add your personal API key in Account Settings.'
+    )
+    error.statusCode = 404
+    throw error
+  }
+  const model =
+    (await AiTokenManager.getModel(userId)) ||
+    Settings.writingAssistant.aiDefaultModel
+  const data = await EInfraClientSync.chatCompletion({
+    token,
+    model,
+    messages,
+    temperature,
+  })
+  const content = data.choices?.[0]?.message?.content || ''
+  return { content, model: data.model || model }
+}
+
+// POST /user/ai/library-support {text}
+// Which entries in the user's research library support or relate to the
+// given manuscript statement? Retrieval-first: the library is provided as
+// context; the model only selects and justifies. Never invents entries.
+async function librarySupport(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const { text } = req.body ?? {}
+  if (typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ message: 'text is required' })
+  }
+  try {
+    const library = await buildLibraryContext(userId)
+    let matches = null
+    for (let attempt = 0; attempt < 2 && !matches; attempt++) {
+      const { content } = await _completion(
+        userId,
+        [
+          {
+            role: 'system',
+            content:
+              'You are an academic literature assistant. Given a manuscript statement and a list of library entries, select the entries that support, relate to or would be appropriate to cite for the statement. Respond ONLY with JSON in the form {"matches": [{"key": "bibtex-key", "reason": "one sentence"}]}. Use only keys from the provided list; never invent keys. If nothing matches, return {"matches": []}.',
+          },
+          {
+            role: 'user',
+            content: `Statement:\n${text.slice(0, 4000)}\n\nLibrary:\n${library}`,
+          },
+        ],
+        0.1
+      )
+      const parsed = extractJson(content)
+      if (parsed && Array.isArray(parsed.matches)) {
+        matches = parsed.matches
+          .filter(m => m && typeof m.key === 'string')
+          .slice(0, 8)
+          .map(m => ({
+            key: m.key,
+            reason: typeof m.reason === 'string' ? m.reason : '',
+          }))
+      }
+    }
+    if (!matches) {
+      return res
+        .status(502)
+        .json({ message: 'could not parse the model response' })
+    }
+    res.json({ matches })
+  } catch (err) {
+    res.status(err.statusCode || 502).json({ message: err.message })
+  }
+}
+
+// POST /user/ai/literature-search {text}
+// LLM extracts scholarly search queries, then Crossref is searched
+// server-side. Results include generated BibTeX and can be added to the
+// library from the UI.
+async function literatureSearch(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const { text } = req.body ?? {}
+  if (typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ message: 'text is required' })
+  }
+  try {
+    let queries = null
+    for (let attempt = 0; attempt < 2 && !queries; attempt++) {
+      const { content } = await _completion(
+        userId,
+        [
+          {
+            role: 'system',
+            content:
+              'You are an academic search assistant. Given a manuscript statement or topic, generate 2 short scholarly search queries (as used on Crossref). Respond ONLY with JSON in the form {"queries": ["query one", "query two"]}.',
+          },
+          { role: 'user', content: text.slice(0, 4000) },
+        ],
+        0.2
+      )
+      const parsed = extractJson(content)
+      if (
+        parsed &&
+        Array.isArray(parsed.queries) &&
+        parsed.queries.length > 0
+      ) {
+        queries = parsed.queries
+          .filter(q => typeof q === 'string')
+          .slice(0, 3)
+      }
+    }
+    if (!queries) {
+      return res
+        .status(502)
+        .json({ message: 'could not parse the model response' })
+    }
+
+    // search Crossref for each query, dedup by DOI
+    const seen = new Set()
+    const results = []
+    for (const query of queries) {
+      const url = new URL(Settings.writingAssistant.crossrefUrl)
+      url.searchParams.set('query.bibliographic', query)
+      url.searchParams.set('rows', '3')
+      const response = await fetch(url, {
+        headers: {
+          'user-agent':
+            'Overleaf-CE-Research-Library/1.0 (mailto:noreply@example.com)',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!response.ok) continue
+      const data = await response.json()
+      for (const item of data.message?.items || []) {
+        const doi = item.DOI || ''
+        if (!doi || seen.has(doi)) continue
+        seen.add(doi)
+        const authors = (item.author || []).map(a =>
+          [a.family, a.given].filter(Boolean).join(', ')
+        )
+        const year =
+          item.issued?.['date-parts']?.[0]?.[0] || null
+        const title = item.title?.[0] || ''
+        const entryType =
+          item.type === 'journal-article'
+            ? 'article'
+            : item.type === 'proceedings-article'
+              ? 'inproceedings'
+              : 'misc'
+        const venue = item['container-title']?.[0] || ''
+        const key = `${(authors[0] || 'unknown').split(',')[0].replace(/[^a-zA-Z]/g, '')}${year || 'nd'}${title.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase() || ''}`
+        results.push({
+          key,
+          title,
+          authors,
+          year,
+          venue,
+          doi,
+          entryType,
+          url: `https://doi.org/${doi}`,
+          reason: query,
+        })
+      }
+    }
+    res.json({ queries, results: results.slice(0, 8) })
+  } catch (err) {
+    res.status(err.statusCode || 502).json({ message: err.message })
+  }
+}
+
 export default {
   runAction,
+  librarySupport,
+  literatureSearch,
   status,
   saveToken,
   deleteToken,

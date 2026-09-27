@@ -32,6 +32,8 @@ if (process.env.WRITING_ASSISTANT_ENABLED === 'true') {
       process.env.E_INFRA_LLM_BASE_URL || 'https://llm.ai.e-infra.cz/v1',
     aiTimeout: parseInt(process.env.E_INFRA_LLM_TIMEOUT || '150000', 10),
     aiDefaultModel: process.env.E_INFRA_LLM_DEFAULT_MODEL || 'mini',
+    crossrefUrl:
+      process.env.CROSSREF_API_URL || 'https://api.crossref.org/works',
   }
 
   WritingAssistantModule = {

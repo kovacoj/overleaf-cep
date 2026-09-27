@@ -34,6 +34,8 @@ const ACTION_TITLES: Record<string, string> = {
   equation: 'Generate equation',
   table: 'Generate table',
   custom: 'Custom instruction',
+  'library-support': 'Support from my library',
+  'literature-search': 'Find related papers',
   'compile-error': 'Explain compilation error',
 }
 
@@ -143,6 +145,21 @@ export default function AIAssistantController() {
   const [error, setError] = useState('')
   const [showDiff, setShowDiff] = useState(true)
   const [aborted, setAborted] = useState(false)
+  const [libraryMatches, setLibraryMatches] = useState<
+    Array<{ key: string; reason: string }>
+  >([])
+  const [searchResults, setSearchResults] = useState<
+    Array<{
+      key: string
+      title: string
+      authors: string[]
+      year: number | null
+      venue: string
+      doi: string
+      reason: string
+    }>
+  >([])
+  const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set())
 
   const close = useCallback(() => {
     setRequest(null)
@@ -151,10 +168,82 @@ export default function AIAssistantController() {
     setInstruction('')
     setLoading(false)
     setAborted(false)
+    setLibraryMatches([])
+    setSearchResults([])
+    setAddedKeys(new Set())
+  }, [])
+
+  const addToLibrary = useCallback(async (entry: Record<string, unknown>) => {
+    try {
+      const response = await fetch(
+        '/user/research-library/references/from-lookup',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-csrf-token': getMeta('ol-csrfToken'),
+          },
+          body: JSON.stringify({
+            reference: { ...entry, source: 'literature-search' },
+          }),
+        }
+      )
+      const data = await response.json()
+      if (response.ok && data.added) {
+        setAddedKeys(previous => new Set(previous).add(String(entry.key)))
+      } else if (response.ok) {
+        setAddedKeys(previous => new Set(previous).add(String(entry.key)))
+      }
+    } catch {
+      // non-fatal
+    }
   }, [])
 
   const run = useCallback(async () => {
     if (!request) return
+
+    // structured, non-streaming actions
+    if (
+      request.action === 'library-support' ||
+      request.action === 'literature-search'
+    ) {
+      setLoading(true)
+      setError('')
+      try {
+        const response = await fetch(
+          `/user/ai/${request.action}`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-csrf-token': getMeta('ol-csrfToken'),
+            },
+            body: JSON.stringify({ text: request.text }),
+          }
+        )
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.message || `request failed (${response.status})`)
+        }
+        if (request.action === 'library-support') {
+          setLibraryMatches(data.matches || [])
+          if (!(data.matches || []).length) {
+            setError('No matching entries found in your library.')
+          }
+        } else {
+          setSearchResults(data.results || [])
+          if (!(data.results || []).length) {
+            setError('No results found.')
+          }
+        }
+      } catch (err: any) {
+        setError(err.message || 'AI request failed')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     setLoading(true)
     setError('')
     setResult('')
@@ -204,6 +293,21 @@ export default function AIAssistantController() {
     view.focus()
     close()
   }, [view, request, result, close])
+
+  const applyCitation = useCallback(
+    (key: string) => {
+      if (!view || !request) return
+      view.dispatch({
+        changes: {
+          from: request.to,
+          to: request.to,
+          insert: `~\\cite{${key}}`,
+        },
+      })
+      view.focus()
+    },
+    [view, request]
+  )
 
   const insertResult = useCallback(() => {
     if (!view || !result) return

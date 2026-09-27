@@ -34,6 +34,12 @@ const AI_ACTIONS = [
   ['review', 'review-document'],
 ]
 
+// structured (non-streaming) AI actions
+const AI_JSON_ACTIONS = [
+  ['library-support', AiController.librarySupport],
+  ['literature-search', AiController.literatureSearch],
+]
+
 export default {
   apply(webRouter) {
     // grammar/style checking (LanguageTool, proxied)
@@ -73,6 +79,15 @@ export default {
     )
 
     // AI actions (streamed, per-user token, explicit invocation only)
+    for (const [route, handler] of AI_JSON_ACTIONS) {
+      webRouter.post(
+        `/user/ai/${route}`,
+        AuthenticationController.requireLogin(),
+        RateLimiterMiddleware.rateLimit(aiRateLimiter),
+        expressify(handler)
+      )
+    }
+
     for (const [route, action] of AI_ACTIONS) {
       webRouter.post(
         `/user/ai/${route}`,

@@ -81,6 +81,8 @@ const AI_ACTIONS: Array<{ action: string; label: string; title: string }> = [
   { action: 'equation', label: '∑', title: 'Generate equation from description' },
   { action: 'table', label: '▦', title: 'Generate table from description/CSV' },
   { action: 'custom', label: '…', title: 'Custom instruction' },
+  { action: 'library-support', label: '📚', title: 'Support from my library' },
+  { action: 'literature-search', label: '🔍', title: 'Find related papers (Crossref)' },
 ]
 
 function createAISelectorView(from: number, to: number, hidden: boolean): TooltipView {
