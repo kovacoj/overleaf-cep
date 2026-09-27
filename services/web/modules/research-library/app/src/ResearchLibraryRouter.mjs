@@ -71,6 +71,14 @@ export default {
       expressify(ResearchLibraryController.exportLibrary)
     )
 
+    webRouter.get(
+      '/project/:project_id/research-library/status',
+      AuthenticationController.requireLogin(),
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      RateLimiterMiddleware.rateLimit(readLimiter),
+      expressify(ResearchLibraryController.projectStatus)
+    )
+
     webRouter.post(
       '/project/:project_id/research-library/materialize',
       AuthenticationController.requireLogin(),

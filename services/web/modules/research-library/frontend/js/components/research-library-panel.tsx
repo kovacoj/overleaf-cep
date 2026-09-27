@@ -36,6 +36,11 @@ export default function ResearchLibraryPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [linkStatus, setLinkStatus] = useState<{
+    linked: boolean
+    upToDate: boolean
+    count?: number
+  } | null>(null)
 
   const fetchReferences = useCallback(async () => {
     try {
@@ -49,9 +54,23 @@ export default function ResearchLibraryPanel() {
     }
   }, [query])
 
+  const fetchLinkStatus = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `/project/${projectId}/research-library/status`
+      )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'failed to load')
+      setLinkStatus(data)
+    } catch {
+      setLinkStatus(null)
+    }
+  }, [projectId])
+
   useEffect(() => {
     fetchReferences()
-  }, [fetchReferences])
+    fetchLinkStatus()
+  }, [fetchReferences, fetchLinkStatus])
 
   const doLookup = useCallback(async () => {
     if (!lookupQuery.trim()) return
@@ -181,12 +200,13 @@ export default function ResearchLibraryPanel() {
       setMessage(
         `${data.updated ? 'Updated' : 'Created'} ${data.docName} (${data.count} references)`
       )
+      await fetchLinkStatus()
     } catch (err: any) {
       setError(err.message || 'failed to materialize')
     } finally {
       setBusy(false)
     }
-  }, [projectId, csrf])
+  }, [projectId, csrf, fetchLinkStatus])
 
   return (
     <div className="research-library-panel full-project-search">
@@ -219,12 +239,29 @@ export default function ResearchLibraryPanel() {
             Paste BibTeX
           </OLButton>
           <OLButton
-            variant="primary"
+            variant={
+              linkStatus?.linked && !linkStatus.upToDate
+                ? 'primary'
+                : linkStatus?.linked && linkStatus.upToDate
+                  ? 'secondary'
+                  : 'primary'
+            }
             size="sm"
-            disabled={busy}
+            disabled={busy || (linkStatus?.linked && linkStatus.upToDate)}
+            title={
+              linkStatus?.linked
+                ? linkStatus.upToDate
+                  ? 'library.bib is up to date'
+                  : 'The library has changed - update library.bib'
+                : 'Materialize the library as library.bib'
+            }
             onClick={materialize}
           >
-            library.bib → project
+            {linkStatus?.linked
+              ? linkStatus.upToDate
+                ? 'library.bib up to date'
+                : 'Update library.bib'
+              : 'library.bib → project'}
           </OLButton>
         </div>
       </div>

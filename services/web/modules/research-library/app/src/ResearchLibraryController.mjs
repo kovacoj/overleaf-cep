@@ -20,8 +20,26 @@ async function _collection() {
 
 const _userId = userId => String(userId)
 
+const LINK_COLLECTION = 'researchLibraryLinks'
+
+async function _linkCollection() {
+  return await getCollectionInternal(LINK_COLLECTION)
+}
+
 const contentHash = text =>
   crypto.createHash('sha256').update(text).digest('hex')
+
+// Library version: changes whenever any entry is added, edited or removed
+async function _libraryVersion(userId) {
+  const collection = await _collection()
+  const entries = await collection
+    .find({ userId: _userId(userId) }, { projection: { key: 1, updatedAt: 1 } })
+    .sort({ key: 1 })
+    .toArray()
+  return contentHash(
+    entries.map(e => `${e.key}:${e.updatedAt?.getTime() || 0}`).join('|')
+  )
+}
 
 function normalizeTitle(title) {
   return String(title || '')
@@ -231,7 +249,6 @@ async function materialize(req, res) {
         lines,
         'research-library'
       )
-      res.json({ updated: true, docName: name, count: entries.length })
     } else {
       await addDoc(
         projectId,
@@ -241,8 +258,27 @@ async function materialize(req, res) {
         'research-library',
         userId
       )
-      res.json({ updated: false, docName: name, count: entries.length })
     }
+    // record the link so the project can report update availability
+    const links = await _linkCollection()
+    const docId = existing ? existing._id : null
+    const version = await _libraryVersion(userId)
+    await links.updateOne(
+      { projectId, userId: _userId(userId) },
+      {
+        $set: {
+          projectId,
+          userId: _userId(userId),
+          docName: name,
+          version,
+          count: entries.length,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    )
+    res.json({ updated: Boolean(existing), docName: name, count: entries.length })
   } catch (err) {
     logger.warn(
       { err: OError.getFullStack(err), userId, projectId },
@@ -250,6 +286,44 @@ async function materialize(req, res) {
     )
     res.status(500).json({ message: 'failed to materialize library' })
   }
+}
+
+// GET /project/:project_id/research-library/status
+// Reports whether the project has a materialized library and whether the
+// library has changed since (update available) - never silently changes
+// the manuscript.
+async function projectStatus(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const { project_id: projectId } = req.params
+
+  const links = await _linkCollection()
+  const link = await links.findOne({
+    projectId,
+    userId: _userId(userId),
+  })
+  if (!link) {
+    return res.json({ linked: false, upToDate: false })
+  }
+  // verify the doc still exists in the project
+  const project = await ProjectGetter.promises.getProject(projectId, {
+    rootFolder: true,
+  })
+  const rootFolder = project && project.rootFolder && project.rootFolder[0]
+  const docExists = Boolean(
+    rootFolder &&
+      (rootFolder.docs || []).some(doc => doc.name === link.docName)
+  )
+  if (!docExists) {
+    return res.json({ linked: false, upToDate: false })
+  }
+  const currentVersion = await _libraryVersion(userId)
+  res.json({
+    linked: true,
+    upToDate: link.version === currentVersion,
+    count: link.count,
+    docName: link.docName,
+    materializedAt: link.updatedAt,
+  })
 }
 
 async function status(req, res) {
@@ -260,6 +334,7 @@ async function status(req, res) {
 }
 
 export default {
+  projectStatus,
   listReferences,
   addReferences,
   lookup,
