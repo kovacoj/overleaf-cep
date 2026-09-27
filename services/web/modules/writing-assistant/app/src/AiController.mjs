@@ -4,6 +4,7 @@ import OError from '@overleaf/o-error'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import AiTokenManager from './AiTokenManager.mjs'
 import EInfraClient from './EInfraClient.mjs'
+import { getCollectionInternal } from '../../../../app/src/infrastructure/mongodb.mjs'
 
 // AI actions for the writing assistant. Each narrow endpoint:
 //   1. requires an authenticated Overleaf user
@@ -38,14 +39,47 @@ const SYSTEM_PROMPTS = {
   'compile-error':
     'You are a LaTeX debugging expert. Explain the given compilation error, identify its likely cause in the provided source lines, and suggest a concrete fix. Respond with three short sections: Explanation, Likely cause, Suggested fix.',
   chat:
-    'You are a helpful academic writing assistant embedded in a LaTeX editor. Answer questions about the provided document context concisely and precisely. When suggesting text changes, show them as LaTeX snippets or before/after examples rather than modifying anything. Preserve technical meaning, equations and citations.',
+    'You are a helpful academic writing assistant embedded in a LaTeX editor. Answer questions about the provided document or library context concisely and precisely. When referencing library items, cite them with their BibTeX keys (e.g. \\cite{key}); never invent references that are not in the provided context. When suggesting text changes, show them as LaTeX snippets or before/after examples rather than modifying anything. Preserve technical meaning, equations and citations.',
   'review-document':
     'You are a rigorous academic reviewer. Review the given LaTeX document. Structure your answer with these exact headings: Summary, Major issues, Minor issues, Questions for the author, Suggestions. Be specific and quote the relevant passages. Focus on clarity, methodology descriptions, mathematical rigor, consistency and academic style. Do not invent facts or references. Keep each section short and actionable.',
   custom:
     'You are an academic writing assistant working on LaTeX text. Follow the user instruction. PRESERVE LaTeX structure (citations, references, labels, math, commands) unless the instruction concerns it. Return ONLY the result text, no commentary.',
 }
 
-function buildMessages(action, body) {
+// Build a compact textual representation of the user's research library
+// (from the research-library module's researchLibraryReferences
+// collection) to serve as retrieval context for "ask my library".
+async function buildLibraryContext(userId) {
+  try {
+    const collection = await getCollectionInternal(
+      'researchLibraryReferences'
+    )
+    const entries = await collection
+      .find({ userId: String(userId) })
+      .sort({ key: 1 })
+      .toArray()
+    if (entries.length === 0) return '(library is empty)'
+    return entries
+      .map(
+        entry =>
+          `- \cite{${entry.key}}: ${entry.title || '(no title)'}${
+            entry.authors && entry.authors.length
+              ? ` — ${entry.authors.slice(0, 3).join(', ')}${
+                  entry.authors.length > 3 ? ' et al.' : ''
+                }`
+              : ''
+          }${entry.year ? ` (${entry.year})` : ''}${
+            entry.venue ? `, ${entry.venue}` : ''
+          }${entry.abstract ? `: ${entry.abstract.slice(0, 300)}` : ''
+          }`
+      )
+      .join('\n')
+  } catch {
+    return '(library unavailable)'
+  }
+}
+
+async function buildMessages(action, body) {
   const system = SYSTEM_PROMPTS[action]
   if (!system) {
     const error = new Error('unknown action')
@@ -125,7 +159,12 @@ function buildMessages(action, body) {
         throw error
       }
       const messages = [{ role: 'system', content: system }]
-      const context = typeof body.context === 'string' ? body.context : ''
+      let context = typeof body.context === 'string' ? body.context : ''
+      if (body.library === true) {
+        context = `The user's research library (BibTeX keys, titles, authors, abstracts):\n\n${await buildLibraryContext(
+          body._userId
+        )}\n\nWhen referencing a library item, use its \cite{key}.`
+      }
       if (context) {
         messages.push({
           role: 'user',
@@ -173,7 +212,10 @@ async function runAction(req, res, action) {
 
   let messages
   try {
-    messages = buildMessages(action, req.body ?? {})
+    messages = await buildMessages(action, {
+      ...(req.body ?? {}),
+      _userId: userId,
+    })
   } catch (err) {
     return res.status(err.statusCode || 400).json({ message: err.message })
   }

@@ -15,7 +15,7 @@ type ChatMessage = {
   content: string
 }
 
-type ContextMode = 'selection' | 'document' | 'none'
+type ContextMode = 'selection' | 'document' | 'library' | 'none'
 
 // SSE streaming POST; onDelta receives text chunks
 function streamCompletion(
@@ -87,6 +87,7 @@ export default function AIAssistantPanel() {
       if (to > from) return view.state.sliceDoc(from, to)
       return ''
     }
+    if (contextMode === 'library') return '' // assembled server-side
     return view.state.doc.toString()
   }, [view, contextMode])
 
@@ -106,11 +107,13 @@ export default function AIAssistantPanel() {
     const history = [...messages, userMessage]
     setMessages(history)
     setStreamingText('')
+    const sendContextMode = contextMode
     const { promise, abort } = streamCompletion(
       '/user/ai/chat',
       {
         messages: history,
         context: getContext(),
+        library: sendContextMode === 'library',
       },
       delta => setStreamingText(previous => previous + delta)
     )
@@ -137,7 +140,7 @@ export default function AIAssistantPanel() {
       setBusy(false)
       abortRef.current = null
     }
-  }, [input, busy, messages, getContext])
+  }, [input, busy, messages, getContext, contextMode])
 
   // keep the latest streamed text accessible inside the async closure
   const streamingTextRef = useRef('')
@@ -215,6 +218,7 @@ export default function AIAssistantPanel() {
           >
             <option value="selection">Context: selection only</option>
             <option value="document">Context: current file</option>
+            <option value="library">Context: my research library</option>
             <option value="none">Context: none</option>
           </select>
           <div
