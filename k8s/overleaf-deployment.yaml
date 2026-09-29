@@ -62,6 +62,18 @@ spec:
               value: "true"
             - name: GITHUB_SYNC_ENABLED
               value: "true"
+            - name: GIT_BRIDGE_ENABLED
+              value: "true"
+            - name: GIT_BRIDGE_HOST
+              value: "git-bridge"
+            - name: GIT_BRIDGE_PORT
+              value: "8000"
+            - name: GIT_BRIDGE_API_BASE_URL
+              value: "http://git-bridge:8000/api"
+            - name: GIT_BRIDGE_REPOSTORE_MAX_FILE_SIZE
+              value: "52428800"
+            - name: V1_HISTORY_URL
+              value: "http://overleaf:3100/api"
             # CE+ extras: Pandoc conversions (requires pandoc in the image,
             # added with the derived image), template gallery, import from
             # external URL (linked-url-proxy, already running in-pod)

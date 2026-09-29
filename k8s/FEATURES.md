@@ -2,7 +2,7 @@
 
 Audit performed against the actual `ext-ce` source tree (v6.2.0-231)
 and the running deployment of `overleafcep/sharelatex:6.2.0-ext-v5.0`.
-Verified 2026-09-25.
+Verified 2026-09-29.
 
 Legend for "Test result":
 
@@ -29,7 +29,7 @@ Legend for "Test result":
 | Template gallery                       | yes                        | **yes** (`OVERLEAF_TEMPLATE_GALLERY=true`)                                           | no                                            | no                                | no           | PASS — `/templates/all` returns 200; manager = admin user                                                                                                                          |
 | Import file from external URL          | yes                        | **yes** (`url` added to linked file types; linked-url-proxy running in-pod)          | no                                            | no                                | no           | PRESENT — `hasLinkUrlFeature=true`                                                                                                                                                 |
 | GitHub Sync                            | yes                        | yes (`GITHUB_SYNC_ENABLED=true`)                                                     | yes (OAuth app, set)                          | github.com                        | no           | PENDING-USER — OAuth start redirects correctly; callback URL validated; E2E bidirectional sync needs account owner                                                                 |
-| Git Bridge (git clone/push)            | yes                        | **no** (`GIT_BRIDGE_ENABLED` unset)                                                  | no                                            | git-bridge service (not deployed) | no           | DEFERRED — needs the git-bridge service running + env wiring                                                                                                                       |
+| Git Bridge (git clone/push)            | yes                        | **yes** (`GIT_BRIDGE_ENABLED=true`)                                                  | per-user PAT                                  | self-hosted git-bridge service    | no           | **PASS** — authenticated clone and push verified against the sample project; repositories and SQLite metadata use a dedicated 10Gi PVC                                             |
 | Zotero                                 | yes                        | wired (`zotero` in linked types; env + cipher secret plumbed)                        | yes — Zotero OAuth app **not yet registered** | zotero.org                        | no           | BLOCKED-ZOTERO-APP — module activates when `ZOTERO_CLIENT_KEY/SECRET` are filled in `overleaf-secrets`; callback must be registered at zotero.org                                  |
 | Multilingual spell checking (Hunspell) | yes                        | yes                                                                                  | no                                            | no                                | no           | PRESENT — 215 dictionary files (~107 languages incl. cs, sk, de, fr, pl, en-GB/US) shipped; client-side; selection/underline/learn-word are browser UI                             |
 | DOCX/Markdown import + export          | yes                        | **yes** (`ENABLE_PANDOC_CONVERSIONS=true` + pandoc/zip/TeX packages in custom image) | no                                            | no                                | custom image | **PASS** — md→project, docx→project, project→docx (valid Word file), project→md (zip) all exercised; imported projects compile (lualatex); nginx UUID fix for conversion downloads |
@@ -53,7 +53,7 @@ Grammar/style checking (LanguageTool) | added | **yes** (`WRITING_ASSISTANT_ENAB
 | SAML | yes (`authentication/saml`) | no | yes (IdP metadata) | IdP | no | AVAILABLE / intentionally not configured |
 | OIDC | yes (`authentication/oidc`) | no | yes (OP credentials) | IdP | no | AVAILABLE / intentionally not configured |
 | Sandboxed compiles | yes | no | no | sibling containers / privileged | no | DEFERRED — incompatible with CERIT PodSecurity `restricted` as-is; separate design project |
-| Git Bridge (repeated) / Dropbox / Mendeley | partial | no | — | — | — | not evaluated (SaaS-linked features) |
+| Dropbox / Mendeley                     | partial                    | no                                                                                   | —                                             | —                                 | —            | not evaluated (SaaS-linked features)                                                                                                                                               |
 
 ## Dashboard
 
@@ -68,7 +68,7 @@ Reference picker             PRESENT
 Zotero                       BLOCKED (OAuth app registration pending)
 Template gallery             PASS
 GitHub Sync                  PENDING-USER (bidirectional sync test)
-Git Bridge                   DEFERRED (service not deployed)
+Git Bridge                   PASS (authenticated clone/push)
 Multilingual spellcheck      PRESENT (assets verified, browser UI)
 LanguageTool grammar         PASS
 DOCX/Markdown conversions    PASS

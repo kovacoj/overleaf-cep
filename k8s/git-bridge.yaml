@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: git-bridge-data
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: git-bridge
+    app.kubernetes.io/part-of: overleaf
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: zfs-csi
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-bridge
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: git-bridge
+    app.kubernetes.io/part-of: overleaf
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: git-bridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: git-bridge
+        app.kubernetes.io/part-of: overleaf
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: git-bridge
+          image: cerit.io/kovacoj1/overleaf-git-bridge:6.2.0-ext-v5.0-k8s1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GIT_BRIDGE_PORT
+              value: "8000"
+            - name: GIT_BRIDGE_BIND_IP
+              value: "0.0.0.0"
+            - name: GIT_BRIDGE_ROOT_DIR
+              value: "/data/git-bridge"
+            - name: GIT_BRIDGE_API_BASE_URL
+              value: "http://overleaf:3000/api/v0"
+            - name: GIT_BRIDGE_OAUTH2_SERVER
+              value: "http://overleaf:80"
+            - name: GIT_BRIDGE_POSTBACK_BASE_URL
+              value: "http://git-bridge:8000"
+            - name: GIT_BRIDGE_ALLOWED_CORS_ORIGINS
+              value: "https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz"
+            - name: GIT_BRIDGE_USER_PASSWORD_ENABLED
+              value: "false"
+            - name: GIT_BRIDGE_REPOSTORE_MAX_FILE_NUM
+              value: "2000"
+            - name: GIT_BRIDGE_REPOSTORE_MAX_FILE_SIZE
+              value: "52428800"
+            - name: GIT_BRIDGE_SWAPSTORE_TYPE
+              value: "noop"
+          volumeMounts:
+            - name: data
+              mountPath: /data/git-bridge
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /status
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health_check
+              port: http
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: git-bridge-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-bridge
+  namespace: kovacovsky-ns
+  labels:
+    app.kubernetes.io/name: git-bridge
+    app.kubernetes.io/part-of: overleaf
+spec:
+  selector:
+    app.kubernetes.io/name: git-bridge
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: overleaf-git
+  namespace: kovacovsky-ns
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1/$2
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+      secretName: overleaf-tls
+  rules:
+    - host: overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /git/([0-9a-f]{24}(?:\.git)?)/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: git-bridge
+                port:
+                  number: 8000

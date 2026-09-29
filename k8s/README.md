@@ -11,7 +11,10 @@ CERIT catalog chart (which is no longer used or installed).
   `mongo-0.mongo.kovacovsky-ns.svc.cluster.local` — this survives pod
   recreation; a ClusterIP member name would not)
 - Redis: `redis:6.2` Deployment, ephemeral (no persistence yet)
-- Storage: `zfs-csi` RWO PVCs — `overleaf-data` (20Gi), `mongo-data` (10Gi)
+- Git Bridge: `cerit.io/kovacoj1/overleaf-git-bridge:6.2.0-ext-v5.0-k8s1`,
+  single replica with a dedicated 10Gi `zfs-csi` RWO PVC
+- Storage: `zfs-csi` RWO PVCs — `overleaf-data` (20Gi), `mongo-data` (10Gi),
+  `git-bridge-data` (10Gi)
 - Runs as non-root (www-data, uid 33) with a custom ConfigMap entrypoint,
   because the namespace enforces PodSecurity `restricted`
 
@@ -233,6 +236,7 @@ curl -I https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
 | `overleaf-history-flush-all-cronjob.yaml` | 03:00 full project-history flush                                                                |
 | `overleaf-service.yaml`                   | ClusterIP service `overleaf:80`                                                                 |
 | `overleaf-ingress.yaml`                   | nginx ingress + cert-manager TLS                                                                |
+| `git-bridge.yaml`                         | Git Bridge PVC, restricted non-root deployment, ClusterIP service, and smart-HTTP ingress      |
 
 ## Deliberate limitations of this first deployment
 
@@ -255,7 +259,7 @@ curl -I https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
   translation.
 - No Mongo authentication (namespace-internal networking only).
 - No Redis persistence, no backups, no NetworkPolicies, no LDAP/OIDC/SAML,
-  no SMTP, no git-bridge, single replica each.
+  no SMTP; application services use a single replica each.
 - Overleaf 6.3 / custom CEP image / Helm chart: deferred.
 
 ## Project-history maintenance

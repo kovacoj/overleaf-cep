@@ -12,5 +12,11 @@ spec:
     - name: http
       port: 80
       targetPort: http
+    - name: web-api
+      port: 3000
+      targetPort: 3000
+    - name: history-v1
+      port: 3100
+      targetPort: 3100
   selector:
     app.kubernetes.io/name: overleaf
