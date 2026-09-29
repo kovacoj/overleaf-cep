@@ -1,8 +1,8 @@
 # Derived image: stock CE+ 6.2.0-ext-v5.0 + writing-assistant + pandoc.
 #
 # Build from the repository root:
-#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21 .
-#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21
+#   docker build -f k8s/image/Dockerfile -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23 .
+#   docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23
 #
 # Layering on the published CE+ image (instead of rebuilding from
 # sharelatex/sharelatex-base) keeps everything except our own changes
