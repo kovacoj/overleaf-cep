@@ -21,7 +21,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -51,8 +51,8 @@ Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s21
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```
@@ -71,10 +71,15 @@ bibliography (rail panel "Research Library" in the editor):
 - `GET /user/research-library/references/export` downloads the full .bib
 - PDFs can be attached to entries (stored on the PVC, text extracted
   with pdftotext) and used for grounded AI "ask paper" questions
+- the LaTeX Assets tab stores reusable `.tex`, `.sty` and `.cls` files,
+  extracts their commands/operators/theorem environments, and materializes
+  them into projects with explicit update-available status
+- the rail panel uses the same header, Material Symbols, icon buttons,
+  tooltips, compact rows and theme tokens as the stock Overleaf editor
 
-Data lives in MongoDB (`researchLibraryReferences`), one personal scope
-per user. Group scopes, shared macros/figures and versioned linked files
-are future extensions (see the research-workspace brief).
+Data lives in MongoDB (`researchLibraryReferences` and
+`researchLibraryAssets`), one personal scope per user. Group scopes and
+shared figures are future extensions (see the research-workspace brief).
 
 ## Zotero
 
@@ -214,20 +219,20 @@ curl -I https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
 
 ## Files
 
-| File | Purpose |
-|---|---|
-| `namespace-check.yaml` | Documentation ConfigMap (cluster facts) |
-| `secret.example.yaml` | Placeholder template for `overleaf-secrets` — never apply |
-| `mongo-service.yaml` | Headless service `mongo:27017` (stable pod DNS for the replica set) |
-| `mongo-statefulset.yaml` | Mongo 8.0, `--replSet overleaf --bind_ip_all`, 10Gi zfs-csi PVC |
-| `mongo-init-job.yaml` | Idempotent `rs.initiate()` job |
-| `redis.yaml` | Redis 6.2 Deployment + Service, ephemeral |
-| `overleaf-pvc.yaml` | 20Gi zfs-csi RWO PVC `overleaf-data` |
-| `overleaf-configmap-entrypoint.yaml` | Non-root entrypoint replacing phusion my_init + history-cron scheduler + graceful-shutdown trap |
-| `overleaf-deployment.yaml` | Overleaf CE+ 6.2.0-ext-v5.0 as www-data (uid 33), nginx on 8080, history-cron sidecar |
-| `overleaf-history-flush-all-cronjob.yaml` | 03:00 full project-history flush |
-| `overleaf-service.yaml` | ClusterIP service `overleaf:80` |
-| `overleaf-ingress.yaml` | nginx ingress + cert-manager TLS |
+| File                                      | Purpose                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `namespace-check.yaml`                    | Documentation ConfigMap (cluster facts)                                                         |
+| `secret.example.yaml`                     | Placeholder template for `overleaf-secrets` — never apply                                       |
+| `mongo-service.yaml`                      | Headless service `mongo:27017` (stable pod DNS for the replica set)                             |
+| `mongo-statefulset.yaml`                  | Mongo 8.0, `--replSet overleaf --bind_ip_all`, 10Gi zfs-csi PVC                                 |
+| `mongo-init-job.yaml`                     | Idempotent `rs.initiate()` job                                                                  |
+| `redis.yaml`                              | Redis 6.2 Deployment + Service, ephemeral                                                       |
+| `overleaf-pvc.yaml`                       | 20Gi zfs-csi RWO PVC `overleaf-data`                                                            |
+| `overleaf-configmap-entrypoint.yaml`      | Non-root entrypoint replacing phusion my_init + history-cron scheduler + graceful-shutdown trap |
+| `overleaf-deployment.yaml`                | Overleaf CE+ 6.2.0-ext-v5.0 as www-data (uid 33), nginx on 8080, history-cron sidecar           |
+| `overleaf-history-flush-all-cronjob.yaml` | 03:00 full project-history flush                                                                |
+| `overleaf-service.yaml`                   | ClusterIP service `overleaf:80`                                                                 |
+| `overleaf-ingress.yaml`                   | nginx ingress + cert-manager TLS                                                                |
 
 ## Deliberate limitations of this first deployment
 
@@ -258,12 +263,12 @@ curl -I https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
 Replaces `server-ce/config/crontab-history` (normally run by the root cron
 inside the image, which we do not run):
 
-| Upstream schedule | Task | Implementation |
-|---|---|---|
-| `*/20 * * * *` | `POST :3054/flush/old?timeout=3600000&limit=5000&background=1` | `history-cron` sidecar |
-| `30 * * * *` | `POST :3054/retry/failures?failureType=soft&...` | `history-cron` sidecar |
-| `45 * * * *` | `POST :3054/retry/failures?failureType=hard&...` | `history-cron` sidecar |
-| `0 3 * * *` | `project-history/scripts/flush_all.js` | `overleaf-history-flush-all` CronJob |
+| Upstream schedule | Task                                                           | Implementation                       |
+| ----------------- | -------------------------------------------------------------- | ------------------------------------ |
+| `*/20 * * * *`    | `POST :3054/flush/old?timeout=3600000&limit=5000&background=1` | `history-cron` sidecar               |
+| `30 * * * *`      | `POST :3054/retry/failures?failureType=soft&...`               | `history-cron` sidecar               |
+| `45 * * * *`      | `POST :3054/retry/failures?failureType=hard&...`               | `history-cron` sidecar               |
+| `0 3 * * *`       | `project-history/scripts/flush_all.js`                         | `overleaf-history-flush-all` CronJob |
 
 **Why a sidecar:** project-history listens on `127.0.0.1:3054` only
 (upstream default via `env.sh`). Rebinding it to the pod interface would be
