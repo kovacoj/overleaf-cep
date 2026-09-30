@@ -2,8 +2,8 @@
  * AI Assistant rail panel: chat about the current document and a structured
  * "Review document" action, using the user's own e-INFRA LLM token via the
  * writing-assistant backend. Context scope is explicit (selection /
- * current file / none) and text is only sent when the user sends a message
- * or presses Review.
+ * current file / none) and the selected context accompanies the user's
+ * message or document-review action.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
@@ -115,12 +115,12 @@ export default function AIAssistantPanel() {
         context: getContext(),
         library: sendContextMode === 'library',
       },
-      delta => setStreamingText(previous => previous + delta)
+      (delta) => setStreamingText((previous) => previous + delta)
     )
     abortRef.current = abort
     try {
       await promise
-      setMessages(previous => [
+      setMessages((previous) => [
         ...previous,
         { role: 'assistant', content: streamingTextRef.current },
       ])
@@ -130,7 +130,7 @@ export default function AIAssistantPanel() {
       }
       // keep partial answer if any
       if (streamingTextRef.current) {
-        setMessages(previous => [
+        setMessages((previous) => [
           ...previous,
           { role: 'assistant', content: streamingTextRef.current },
         ])
@@ -155,9 +155,9 @@ export default function AIAssistantPanel() {
     setMode('review')
     setReviewResult('')
     const { promise, abort } = streamCompletion(
-      '/user/ai/review',
+      '/user/ai/review-document',
       { text: view ? view.state.doc.toString() : '' },
-      delta => setReviewResult(previous => previous + delta)
+      (delta) => setReviewResult((previous) => previous + delta)
     )
     abortRef.current = abort
     try {
@@ -213,7 +213,7 @@ export default function AIAssistantPanel() {
           <select
             className="form-control form-control-sm"
             value={contextMode}
-            onChange={e => setContextMode(e.target.value as ContextMode)}
+            onChange={(e) => setContextMode(e.target.value as ContextMode)}
             style={{ marginBottom: '8px' }}
           >
             <option value="selection">Context: selection only</option>
@@ -237,8 +237,8 @@ export default function AIAssistantPanel() {
             {messages.length === 0 && !streamingText && (
               <div className="small text-muted">
                 Ask anything about your document. Requests are sent to the
-                e-INFRA CZ LLM service using your personal API token, only
-                when you send a message.
+                e-INFRA CZ LLM service using your personal API token, only when
+                you send a message.
               </div>
             )}
             {messages.map((message, index) => (
@@ -290,8 +290,8 @@ export default function AIAssistantPanel() {
               placeholder="Ask about this document…"
               value={input}
               disabled={busy}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   send()

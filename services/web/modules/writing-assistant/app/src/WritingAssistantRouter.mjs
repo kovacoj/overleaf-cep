@@ -25,13 +25,13 @@ const AI_ACTIONS = [
   ['translate', 'translate'],
   ['review', 'review'],
   ['custom', 'custom'],
-  ['latex/fix', 'latex-fix'],
-  ['latex/explain', 'latex-explain'],
+  ['latex-fix', 'latex-fix'],
+  ['latex-explain', 'latex-explain'],
   ['equation', 'equation'],
   ['table', 'table'],
   ['compile-error', 'compile-error'],
   ['chat', 'chat'],
-  ['review', 'review-document'],
+  ['review-document', 'review-document'],
   ['ask-paper', 'ask-paper'],
 ]
 
@@ -81,7 +81,7 @@ export default {
       expressify(AiController.setModel)
     )
 
-    // AI actions (streamed, per-user token, explicit invocation only)
+    // AI actions (streamed, authenticated, and scoped to known operations)
     for (const [route, handler] of AI_JSON_ACTIONS) {
       webRouter.post(
         `/user/ai/${route}`,

@@ -2,9 +2,9 @@
  * AI assistant controller: modal UI opened by the editor selection tooltip
  * (window event "editor:ai-assistant") or the compile-error log action.
  *
- * Flow: user picks an action -> modal opens with the selected text ->
- * explicit Run streams the response (SSE) from the Overleaf backend
- * (POST /user/ai/:action), which uses the user's own e-INFRA API token.
+ * Flow: user picks an action -> the modal opens and starts the request unless
+ * the action needs more input -> the response streams from the Overleaf
+ * backend (POST /user/ai/:action) using the user's own e-INFRA API token.
  * Mutating results are shown as a word-level diff and applied only on
  * Accept. Cancel aborts the in-flight request.
  */
@@ -43,20 +43,36 @@ const ACTION_TITLES: Record<string, string> = {
   'compile-error': 'Explain compilation error',
 }
 
-const TRANSLATE_LANGUAGES = ['English', 'Czech', 'Slovak', 'German', 'French', 'Polish', 'Spanish']
+const TRANSLATE_LANGUAGES = [
+  'English',
+  'Czech',
+  'Slovak',
+  'German',
+  'French',
+  'Polish',
+  'Spanish',
+]
+
+function needsInput(action: string) {
+  return action === 'custom' || action === 'translate' || action === 'ask-paper'
+}
 
 // simple word-level diff (LCS) for the preview
 function diffWords(
   a: string,
   b: string
 ): Array<{ text: string; removed?: boolean; added?: boolean }> {
-  const split = (s: string) => s.split(/(\s+)/).filter(part => part.length > 0)
+  const split = (s: string) =>
+    s.split(/(\s+)/).filter((part) => part.length > 0)
   const left = split(a)
   const right = split(b)
   const n = left.length
   const m = right.length
   if (n * m > 250000) {
-    return [{ text: a, removed: true }, { text: b, added: true }]
+    return [
+      { text: a, removed: true },
+      { text: b, added: true },
+    ]
   }
   const table: number[][] = Array.from({ length: n + 1 }, () =>
     new Array<number>(m + 1).fill(0)
@@ -213,113 +229,124 @@ export default function AIAssistantController() {
       )
       const data = await response.json()
       if (response.ok && data.added) {
-        setAddedKeys(previous => new Set(previous).add(String(entry.key)))
+        setAddedKeys((previous) => new Set(previous).add(String(entry.key)))
       } else if (response.ok) {
-        setAddedKeys(previous => new Set(previous).add(String(entry.key)))
+        setAddedKeys((previous) => new Set(previous).add(String(entry.key)))
       }
     } catch {
       // non-fatal
     }
   }, [])
 
-  const run = useCallback(async () => {
-    if (!request) return
+  const run = useCallback(
+    async (activeRequest: Request | null = request) => {
+      if (!activeRequest || loading) return
 
-    // structured, non-streaming actions
-    if (
-      request.action === 'library-support' ||
-      request.action === 'literature-search' ||
-      request.action === 'missing-citations' ||
-      request.action === 'verify-citations'
-    ) {
-      setLoading(true)
-      setError('')
-      try {
-        const response = await fetch(
-          `/user/ai/${request.action}`,
-          {
+      setLibraryMatches([])
+      setSearchResults([])
+      setAddedKeys(new Set())
+      setCitationClaims([])
+      setCitationChecks([])
+
+      // structured, non-streaming actions
+      if (
+        activeRequest.action === 'library-support' ||
+        activeRequest.action === 'literature-search' ||
+        activeRequest.action === 'missing-citations' ||
+        activeRequest.action === 'verify-citations'
+      ) {
+        setLoading(true)
+        setError('')
+        try {
+          const response = await fetch(`/user/ai/${activeRequest.action}`, {
             method: 'POST',
             headers: {
               'content-type': 'application/json',
               'x-csrf-token': getMeta('ol-csrfToken'),
             },
-            body: JSON.stringify({ text: request.text }),
+            body: JSON.stringify({ text: activeRequest.text }),
+          })
+          const data = await response.json()
+          if (!response.ok) {
+            throw new Error(
+              data.message || `request failed (${response.status})`
+            )
           }
-        )
-        const data = await response.json()
-        if (!response.ok) {
-          throw new Error(data.message || `request failed (${response.status})`)
+          if (activeRequest.action === 'library-support') {
+            setLibraryMatches(data.matches || [])
+            if (!(data.matches || []).length) {
+              setError('No matching entries found in your library.')
+            }
+          } else if (activeRequest.action === 'missing-citations') {
+            setCitationClaims(data.claims || [])
+            if (!(data.claims || []).length) {
+              setError('No citation-worthy claims detected.')
+            }
+          } else if (activeRequest.action === 'verify-citations') {
+            setCitationChecks(data.checks || [])
+            if (!(data.checks || []).length) {
+              setError('No \\cite commands found in the selection.')
+            }
+          } else {
+            setSearchResults(data.results || [])
+            if (!(data.results || []).length) {
+              setError('No results found.')
+            }
+          }
+        } catch (err: any) {
+          setError(err.message || 'AI request failed')
+        } finally {
+          setLoading(false)
         }
-        if (request.action === 'library-support') {
-          setLibraryMatches(data.matches || [])
-          if (!(data.matches || []).length) {
-            setError('No matching entries found in your library.')
-          }
-        } else if (request.action === 'missing-citations') {
-          setCitationClaims(data.claims || [])
-          if (!(data.claims || []).length) {
-            setError('No citation-worthy claims detected.')
-          }
-        } else if (request.action === 'verify-citations') {
-          setCitationChecks(data.checks || [])
-          if (!(data.checks || []).length) {
-            setError('No \\cite commands found in the selection.')
-          }
-        } else {
-          setSearchResults(data.results || [])
-          if (!(data.results || []).length) {
-            setError('No results found.')
-          }
-        }
+        return
+      }
+
+      setLoading(true)
+      setError('')
+      setResult('')
+      setAborted(false)
+      const body: Record<string, unknown> = {
+        text: activeRequest.text,
+        latex: activeRequest.text,
+        language,
+        instruction,
+      }
+      if (activeRequest.action === 'compile-error') {
+        body.error = activeRequest.error
+        body.sourceLines = activeRequest.sourceLines
+      }
+      if (
+        activeRequest.action === 'equation' ||
+        activeRequest.action === 'table'
+      ) {
+        body.description = activeRequest.text
+      }
+      if (activeRequest.action === 'ask-paper') {
+        body.referenceId = activeRequest.referenceId
+        body.question = paperQuestion
+      }
+      const { promise, abort } = streamCompletion(
+        `/user/ai/${activeRequest.action}`,
+        body,
+        (delta) => setResult((previous) => previous + delta)
+      )
+      // store the abort fn on the component for the Cancel button
+      abortRef.current = abort
+      try {
+        await promise
       } catch (err: any) {
-        setError(err.message || 'AI request failed')
+        if (err.name === 'AbortError') {
+          setAborted(true)
+        } else {
+          setError(err.message || 'AI request failed')
+        }
       } finally {
         setLoading(false)
+        abortRef.current = null
       }
-      return
-    }
-
-    setLoading(true)
-    setError('')
-    setResult('')
-    setAborted(false)
-    const body: Record<string, unknown> = {
-      text: request.text,
-      latex: request.text,
-      language,
-      instruction,
-    }
-    if (request.action === 'compile-error') {
-      body.error = request.error
-      body.sourceLines = request.sourceLines
-    }
-    if (request.action === 'equation' || request.action === 'table') {
-      body.description = request.text
-    }
-    if (request.action === 'ask-paper') {
-      body.referenceId = request.referenceId
-      body.question = paperQuestion
-    }
-    const { promise, abort } = streamCompletion(
-      `/user/ai/${request.action}`,
-      body,
-      delta => setResult(previous => previous + delta)
-    )
-    // store the abort fn on the component for the Cancel button
-    abortRef.current = abort
-    try {
-      await promise
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setAborted(true)
-      } else {
-        setError(err.message || 'AI request failed')
-      }
-    } finally {
-      setLoading(false)
-      abortRef.current = null
-    }
-  }, [request, instruction, language, paperQuestion])
+    },
+    [request, loading, instruction, language, paperQuestion]
+  )
 
   const abortRef = React.useRef<null | (() => void)>(null)
 
@@ -366,18 +393,29 @@ export default function AIAssistantController() {
       setResult('')
       setError('')
       setInstruction('')
-      setRequest({
+      setPaperQuestion('')
+      setLibraryMatches([])
+      setSearchResults([])
+      setAddedKeys(new Set())
+      setCitationClaims([])
+      setCitationChecks([])
+      const nextRequest = {
         action: detail.action,
         from: detail.from,
         to: detail.to,
         text,
         error: detail.error,
         sourceLines: detail.sourceLines,
-      })
+        referenceId: detail.referenceId,
+      }
+      setRequest(nextRequest)
+      if (!needsInput(nextRequest.action)) {
+        void run(nextRequest)
+      }
     }
     window.addEventListener(AI_EVENT, handler)
     return () => window.removeEventListener(AI_EVENT, handler)
-  }, [view])
+  }, [view, run])
 
   if (!request) return null
 
@@ -388,6 +426,30 @@ export default function AIAssistantController() {
     request.action === 'explain' ||
     request.action === 'latex-explain'
   const title = ACTION_TITLES[request.action] || 'AI assistant'
+  const requiresInput = needsInput(request.action)
+  const hasStructuredResult =
+    libraryMatches.length > 0 ||
+    searchResults.length > 0 ||
+    citationClaims.length > 0 ||
+    citationChecks.length > 0
+  const hasOutput = Boolean(result) || hasStructuredResult
+  const canRun =
+    request.action === 'custom'
+      ? Boolean(instruction.trim())
+      : request.action === 'ask-paper'
+        ? Boolean(paperQuestion.trim())
+        : true
+  const runLabel = hasOutput
+    ? 'Run again'
+    : error
+      ? 'Retry'
+      : request.action === 'ask-paper'
+        ? 'Ask'
+        : request.action === 'translate'
+          ? 'Translate'
+          : request.action === 'custom'
+            ? 'Apply instruction'
+            : 'Run'
 
   return (
     <div className="modal in" style={{ display: 'block' }}>
@@ -401,8 +463,8 @@ export default function AIAssistantController() {
           </div>
           <div className="modal-body">
             <p className="small text-muted">
-              Sent to the e-INFRA CZ LLM service using your personal API
-              token, only for this explicit request.
+              This action sends the relevant text to the e-INFRA CZ LLM service
+              using your personal API token.
             </p>
             {isCompileError && (
               <pre className="ai-assistant-error small">{request.error}</pre>
@@ -422,16 +484,24 @@ export default function AIAssistantController() {
                 rows={2}
                 placeholder="Instruction, e.g. rewrite in passive voice"
                 value={instruction}
-                onChange={e => setInstruction(e.target.value)}
+                disabled={loading}
+                onChange={(e) => setInstruction(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && instruction.trim()) {
+                    e.preventDefault()
+                    void run()
+                  }
+                }}
               />
             )}
             {request.action === 'translate' && (
               <select
                 className="form-control"
                 value={language}
-                onChange={e => setLanguage(e.target.value)}
+                disabled={loading}
+                onChange={(e) => setLanguage(e.target.value)}
               >
-                {TRANSLATE_LANGUAGES.map(l => (
+                {TRANSLATE_LANGUAGES.map((l) => (
                   <option key={l} value={l}>
                     {l}
                   </option>
@@ -445,7 +515,18 @@ export default function AIAssistantController() {
                 rows={2}
                 placeholder="Ask a question about this paper…"
                 value={paperQuestion}
-                onChange={e => setPaperQuestion(e.target.value)}
+                disabled={loading}
+                onChange={(e) => setPaperQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.shiftKey &&
+                    paperQuestion.trim()
+                  ) {
+                    e.preventDefault()
+                    void run()
+                  }
+                }}
               />
             )}
 
@@ -456,12 +537,11 @@ export default function AIAssistantController() {
                   role="status"
                   aria-hidden="true"
                 />
-                &nbsp;Thinking… <span className="small text-muted">(streaming)</span>
+                &nbsp;Thinking…{' '}
+                <span className="small text-muted">(streaming)</span>
               </div>
             )}
-            {aborted && (
-              <div className="small text-muted">Cancelled.</div>
-            )}
+            {aborted && <div className="small text-muted">Cancelled.</div>}
 
             {error && (
               <div className="alert alert-danger small" role="alert">
@@ -480,7 +560,7 @@ export default function AIAssistantController() {
                         <input
                           type="checkbox"
                           checked={showDiff}
-                          onChange={e => setShowDiff(e.target.checked)}
+                          onChange={(e) => setShowDiff(e.target.checked)}
                         />
                         &nbsp;Show changes
                       </label>
@@ -509,6 +589,71 @@ export default function AIAssistantController() {
                 )}
               </>
             )}
+
+            {libraryMatches.length > 0 && (
+              <div className="list-group">
+                {libraryMatches.map((match) => (
+                  <div className="list-group-item" key={match.key}>
+                    <strong>{match.key}</strong>
+                    <p className="small">{match.reason}</p>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => applyCitation(match.key)}
+                    >
+                      Insert citation
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searchResults.length > 0 && (
+              <div className="list-group">
+                {searchResults.map((entry) => (
+                  <div className="list-group-item" key={entry.key}>
+                    <strong>{entry.title}</strong>
+                    <div className="small text-muted">
+                      {entry.authors.join(', ')}
+                      {entry.year ? ` (${entry.year})` : ''}
+                    </div>
+                    <p className="small">{entry.reason}</p>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={addedKeys.has(entry.key)}
+                      onClick={() => addToLibrary(entry)}
+                    >
+                      {addedKeys.has(entry.key) ? 'Added' : 'Add to library'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {citationClaims.length > 0 && (
+              <div className="list-group">
+                {citationClaims.map((claim, index) => (
+                  <div className="list-group-item" key={index}>
+                    <strong>{claim.classification}</strong>
+                    <blockquote className="small">{claim.quote}</blockquote>
+                    <p className="small">{claim.suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {citationChecks.length > 0 && (
+              <div className="list-group">
+                {citationChecks.map((check) => (
+                  <div className="list-group-item" key={check.key}>
+                    <strong>
+                      {check.key}: {check.verdict}
+                    </strong>
+                    {check.title && <div className="small">{check.title}</div>}
+                    <p className="small">{check.note}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="modal-footer">
             {loading ? (
@@ -518,16 +663,24 @@ export default function AIAssistantController() {
               >
                 Cancel
               </button>
-            ) : (
-              <button className="btn btn-primary" onClick={run}>
-                {result ? 'Run again' : 'Run'}
+            ) : requiresInput || hasOutput || error ? (
+              <button
+                className="btn btn-primary"
+                disabled={!canRun}
+                onClick={() => void run()}
+              >
+                {runLabel}
               </button>
-            )}
-            {result && !loading && !isReview && !isCompileError && !isGenerate && (
-              <button className="btn btn-success" onClick={applyResult}>
-                Accept (replace selection)
-              </button>
-            )}
+            ) : null}
+            {result &&
+              !loading &&
+              !isReview &&
+              !isCompileError &&
+              !isGenerate && (
+                <button className="btn btn-success" onClick={applyResult}>
+                  Accept (replace selection)
+                </button>
+              )}
             {result && !loading && isGenerate && (
               <button className="btn btn-success" onClick={insertResult}>
                 Insert
