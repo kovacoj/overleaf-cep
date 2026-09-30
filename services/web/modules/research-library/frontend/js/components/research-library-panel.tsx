@@ -279,6 +279,44 @@ export default function ResearchLibraryPanel() {
     }
   }, [bibtexText, fetchReferences]);
 
+  const importFromZotero = useCallback(async () => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        "/user/research-library/references/from-zotero",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": getMeta("ol-csrfToken"),
+          },
+          body: JSON.stringify({}),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Zotero import failed");
+      setMessage(
+        `${data.added?.length || 0} added${
+          data.duplicates?.length
+            ? `, ${data.duplicates.length} duplicates`
+            : ""
+        }`,
+      );
+      await fetchReferences();
+      await fetchLinkStatus();
+    } catch (err: any) {
+      setError(
+        err.message === "RefProvider credentials missed"
+          ? "Link Zotero in Account Settings first"
+          : err.message || "Zotero import failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [fetchReferences, fetchLinkStatus]);
+
   const deleteReference = useCallback(
     async (referenceId: string) => {
       try {
@@ -590,6 +628,15 @@ export default function ResearchLibraryPanel() {
                 }
               >
                 Paste BibTeX
+              </OLButton>
+              <OLButton
+                variant="secondary"
+                size="sm"
+                leadingIcon="download"
+                disabled={busy}
+                onClick={importFromZotero}
+              >
+                Import from Zotero
               </OLButton>
               <OLButton
                 variant={

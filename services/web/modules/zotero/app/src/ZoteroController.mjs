@@ -7,6 +7,30 @@ import ZoteroApiClient from './ZoteroApiClient.mjs'
 import ZoteroOAuth from './ZoteroOAuth.mjs'
 import TokenManager from './TokenManager.mjs'
 
+async function link(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const apiKey =
+    typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : ''
+  if (!apiKey || apiKey.length > 256) {
+    return res
+      .status(400)
+      .json({ message: 'A valid Zotero API key is required' })
+  }
+  try {
+    const { zoteroUserId } = await ZoteroApiClient.validateApiKey(apiKey)
+    await TokenManager.storeCredentials(userId, apiKey, zoteroUserId)
+    res.json({ linked: true })
+  } catch (err) {
+    logger.warn(
+      { err: OError.getFullStack(err), userId },
+      'Failed to link Zotero API key',
+    )
+    res
+      .status(OError.getFullInfo(err)?.status || 400)
+      .json({ message: 'Invalid Zotero API key' })
+  }
+}
+
 async function oauth(req, res) {
   try {
     const requestToken = await ZoteroOAuth.getRequestToken()
@@ -15,18 +39,21 @@ async function oauth(req, res) {
     req.session.zoteroOAuth = {
       token: requestToken.oauth_token,
       tokenSecret: requestToken.oauth_token_secret,
-      isPopup
+      isPopup,
     }
 
     const authUrl = ZoteroOAuth.getAuthorizationUrl(requestToken.oauth_token)
     res.redirect(authUrl)
-
   } catch (err) {
     logger.error(OError.getFullStack(err))
     const info = OError.getFullInfo(err)
-    logger.error({ info }, "Failed to start Zotero authorization")
+    logger.error({ info }, 'Failed to start Zotero authorization')
 
-    HttpErrorHandler.badRequest(req, res, 'Failed to start Zotero authorization')
+    HttpErrorHandler.badRequest(
+      req,
+      res,
+      'Failed to start Zotero authorization',
+    )
     return
   }
 }
@@ -34,10 +61,7 @@ async function oauth(req, res) {
 async function oauthCallback(req, res) {
   const userId = SessionManager.getLoggedInUserId(req.session)
 
-  const {
-    oauth_token: oauthToken,
-    oauth_verifier: oauthVerifier,
-  } = req.query
+  const { oauth_token: oauthToken, oauth_verifier: oauthVerifier } = req.query
 
   const saved = req.session.zoteroOAuth
   delete req.session.zoteroOAuth
@@ -48,19 +72,23 @@ async function oauthCallback(req, res) {
   }
 
   try {
-    const { accessToken, zoteroUserId } = await ZoteroOAuth.exchangeRequestTokenForAccessToken(
-      oauthToken,
-      saved.tokenSecret,
-      oauthVerifier,
-    )
+    const { accessToken, zoteroUserId } =
+      await ZoteroOAuth.exchangeRequestTokenForAccessToken(
+        oauthToken,
+        saved.tokenSecret,
+        oauthVerifier,
+      )
     await TokenManager.storeCredentials(userId, accessToken, zoteroUserId)
-
   } catch (err) {
     logger.error(OError.getFullStack(err))
     const info = OError.getFullInfo(err)
     logger.error({ info }, "Failed to obtain Zotero access token'")
 
-    HttpErrorHandler.badRequest(req, res, 'Failed to obtain Zotero access token')
+    HttpErrorHandler.badRequest(
+      req,
+      res,
+      'Failed to obtain Zotero access token',
+    )
     return
   }
 
@@ -69,7 +97,7 @@ async function oauthCallback(req, res) {
 
   res.setHeader(
     'Content-Security-Policy',
-    `${csp}; script-src 'nonce-${nonce}'`
+    `${csp}; script-src 'nonce-${nonce}'`,
   )
 
   res.send(`
@@ -79,9 +107,10 @@ async function oauthCallback(req, res) {
         <script nonce="${nonce}">
           const channel = new BroadcastChannel('zotero')
           channel.postMessage({ type: 'zotero-linked' })
-          ${saved.isPopup
-            ? 'window.close()'
-            : "location.href = '/user/settings#references'"
+          ${
+            saved.isPopup
+              ? 'window.close()'
+              : "location.href = '/user/settings#references'"
           }
         </script>
       </body>
@@ -99,12 +128,11 @@ async function getConnectionStatus(req, res) {
   try {
     const isConnected = await ZoteroApiClient.getConnectionStatus(userId)
     res.json(isConnected)
-
   } catch (err) {
     const info = OError.getFullInfo(err)
     const errStatus = info?.status || 500
     logger.error(OError.getFullStack(err))
-    logger.error({ info }, "failed to check user connection")
+    logger.error({ info }, 'failed to check user connection')
     return res.status(errStatus).json({ message: err.message })
   }
 }
@@ -122,7 +150,7 @@ async function getGroups(req, res) {
     const info = OError.getFullInfo(err)
     const errStatus = info?.status || 500
     logger.error(OError.getFullStack(err))
-    logger.error({ info }, "failed to get user groups")
+    logger.error({ info }, 'failed to get user groups')
     return res.status(errStatus).json({ message: err.message })
   }
 }
@@ -140,15 +168,16 @@ async function unlink(req, res) {
     const info = OError.getFullInfo(err)
     const errStatus = info?.status || 500
     logger.error(OError.getFullStack(err))
-    logger.error({ info }, "error unlinking Zotero account")
+    logger.error({ info }, 'error unlinking Zotero account')
     return res.status(errStatus).json({ message: err.message })
   }
 }
 
 export default {
+  link,
   oauth,
   oauthCallback,
   getConnectionStatus,
   getGroups,
-  unlink
+  unlink,
 }

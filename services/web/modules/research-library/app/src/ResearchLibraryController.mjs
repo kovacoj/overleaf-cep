@@ -15,6 +15,7 @@ import {
   entryToBibtex,
 } from "./BibtexParser.mjs";
 import { lookupReference } from "./ReferenceLookup.mjs";
+import ZoteroApiClient from "../../../zotero/app/src/ZoteroApiClient.mjs";
 
 const COLLECTION = "researchLibraryReferences";
 
@@ -94,7 +95,7 @@ async function listReferences(req, res) {
   res.json({ references: entries });
 }
 
-async function addReferences(req, res) {
+async function addReferences(req, res, source = "bibtex") {
   const userId = SessionManager.getLoggedInUserId(req.session);
   const { bibtex } = req.body ?? {};
   if (typeof bibtex !== "string" || bibtex.trim().length === 0) {
@@ -123,7 +124,7 @@ async function addReferences(req, res) {
       userId: _userId(userId),
       ...entry,
       normalizedTitle: normalizeTitle(entry.title),
-      source: "bibtex",
+      source,
       contentHash: contentHash(entry.title + (entry.year || "")),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -143,6 +144,24 @@ async function lookup(req, res) {
     const status = err.statusCode || 502;
     res.status(status).json({ message: err.message || "lookup failed" });
   }
+}
+
+async function importFromZotero(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session);
+  const groupId = req.body?.groupId;
+  if (groupId != null && groupId !== "" && !/^\d+$/.test(String(groupId))) {
+    return res.status(400).json({ message: "invalid Zotero group" });
+  }
+  const bibtex = await ZoteroApiClient.getLibraryBibtex(
+    userId,
+    groupId ? String(groupId) : null,
+    "bibtex",
+  );
+  if (!bibtex.trim()) {
+    return res.json({ added: [], duplicates: [], errors: [] });
+  }
+  req.body = { bibtex };
+  return addReferences(req, res, "zotero");
 }
 
 async function addFromLookup(req, res) {
@@ -348,6 +367,7 @@ export default {
   projectStatus,
   listReferences,
   addReferences,
+  importFromZotero,
   lookup,
   addFromLookup,
   deleteReference,

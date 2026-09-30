@@ -44,13 +44,13 @@ async function loadManifest() {
       loadManifestFromWebpackDevServer()
       const intervalHandle = setInterval(
         loadManifestFromWebpackDevServer,
-        10 * 1000
+        10 * 1000,
       )
       addOptionalCleanupHandlerAfterDrainingConnections(
         'refresh webpack manifest',
         () => {
           clearInterval(intervalHandle)
-        }
+        },
       )
       break
     }
@@ -65,11 +65,11 @@ function loadManifestFromWebpackDevServer(done = function () {}) {
       Host: 'localhost',
     },
   })
-    .then(json => {
+    .then((json) => {
       webpackManifest = json
       done()
     })
-    .catch(error => {
+    .catch((error) => {
       logger.err({ error }, 'cannot fetch webpack manifest')
       done(error)
     })
@@ -105,7 +105,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
     res.setContentDisposition = function (type, { filename }) {
       res.setHeader(
         'Content-Disposition',
-        contentDisposition(filename, { type })
+        contentDisposition(filename, { type }),
       )
     }
     next()
@@ -115,10 +115,9 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   publicApiRouter.use(addSetContentDisposition)
 
   webRouter.use(function (req, res, next) {
-    req.externalAuthenticationSystemUsed =
-      () => !!req?.user?.externalAuth
-    res.locals.externalAuthenticationSystemUsed =
-      () => !!req?.user?.externalAuth
+    req.externalAuthenticationSystemUsed = () => !!req?.user?.externalAuth
+    res.locals.externalAuthenticationSystemUsed = () =>
+      !!req?.user?.externalAuth
     req.hasFeature = res.locals.hasFeature = Features.hasFeature
     next()
   })
@@ -157,15 +156,15 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       // Loading the entrypoint twice results in broken execution.
       let chunks = getWebpackAssets(entrypoint, 'js')
       if (runtimeEmitted) {
-        chunks = chunks.filter(chunk => chunk !== runtimeChunk)
+        chunks = chunks.filter((chunk) => chunk !== runtimeChunk)
       }
       runtimeEmitted = true
-      return chunks.map(chunk => staticFilesBase + chunk)
+      return chunks.map((chunk) => staticFilesBase + chunk)
     }
 
     res.locals.entrypointStyles = function (entrypoint) {
       const chunks = getWebpackAssets(entrypoint, 'css')
-      return chunks.map(chunk => staticFilesBase + chunk)
+      return chunks.map((chunk) => staticFilesBase + chunk)
     }
 
     res.locals.mathJaxPath = `/js/libs/mathjax-${PackageVersions.version.mathjax}/tex-svg.js`
@@ -194,12 +193,12 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   webRouter.use(function (req, res, next) {
     res.locals.translate = req.i18n.translate
 
-    const addTranslatedTextDeep = obj => {
+    const addTranslatedTextDeep = (obj) => {
       if (_.isObject(obj)) {
         if (_.has(obj, 'text')) {
           obj.translatedText = req.i18n.translate(obj.text)
         }
-        _.forOwn(obj, value => {
+        _.forOwn(obj, (value) => {
           addTranslatedTextDeep(value)
         })
       }
@@ -208,7 +207,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
     // This function is used to add translations from the server for main
     // navigation and footer items because it's tricky to get them in the front
     // end otherwise.
-    res.locals.cloneAndTranslateText = obj => {
+    res.locals.cloneAndTranslateText = (obj) => {
       const clone = _.cloneDeep(obj)
       addTranslatedTextDeep(clone)
       return clone
@@ -247,7 +246,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
         await import('../Features/Helpers/StringHelper.mjs')
       ).default
       next()
-    })
+    }),
   )
 
   webRouter.use(function (req, res, next) {
@@ -256,7 +255,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
-    res.locals.getReqQueryParam = field =>
+    res.locals.getReqQueryParam = (field) =>
       req.query != null ? req.query[field] : undefined
     next()
   })
@@ -347,12 +346,15 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
     for (const cookieName in req.cookies) {
       if (cookieName.startsWith(KEY_PREFIX)) {
         const legacyNotification = LEGACY_NOTIFICATIONS.find(
-          ({ id }) => cookieName === `${KEY_PREFIX}${id}`
+          ({ id }) => cookieName === `${KEY_PREFIX}${id}`,
         )
         if (legacyNotification) {
           // Remove the cookie for legacy notifications that we no longer use.
           for (const path of legacyNotification.paths) {
-            res.clearCookie(cookieName, { path, domain: Settings.cookieDomain })
+            res.clearCookie(cookieName, {
+              path,
+              domain: Settings.cookieDomain,
+            })
           }
         } else {
           dismissedNotifications.push(cookieName.slice(KEY_PREFIX.length))
@@ -378,7 +380,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       hasLinkUrlFeature: Features.hasFeature('link-url'),
       hasLinkedProjectFileFeature: Features.hasFeature('linked-project-file'),
       hasLinkedProjectOutputFileFeature: Features.hasFeature(
-        'linked-project-output-file'
+        'linked-project-output-file',
       ),
       siteUrl: Settings.siteUrl,
       emailConfirmationDisabled: Settings.emailConfirmationDisabled,
@@ -417,8 +419,9 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       cioWriteKey: Settings.analytics?.cio?.writeKey,
       cioSiteId: Settings.analytics?.cio?.siteId,
       linkedInInsightsPartnerId: Settings.analytics?.linkedIn?.partnerId,
-      githubSyncEnabled: !!Settings.githubSync?.clientID && !!Settings.githubSync?.clientSecret,
-      zoteroEnabled: !!Settings.zotero?.clientKey && !!Settings.zotero?.clientSecret,
+      githubSyncEnabled:
+        !!Settings.githubSync?.clientID && !!Settings.githubSync?.clientSecret,
+      zoteroEnabled: Settings.enabledLinkedFileTypes?.includes('zotero'),
       enablePandocConversions: Settings.enablePandocConversions,
       mixpanelLabsToken:
         Settings.labs?.enable && Settings.analytics?.mixpanel?.labsToken,

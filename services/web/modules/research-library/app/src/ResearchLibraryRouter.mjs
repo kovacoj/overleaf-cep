@@ -53,6 +53,13 @@ export default {
     );
 
     webRouter.post(
+      "/user/research-library/references/from-zotero",
+      AuthenticationController.requireLogin(),
+      RateLimiterMiddleware.rateLimit(lookupLimiter),
+      expressify(ResearchLibraryController.importFromZotero),
+    );
+
+    webRouter.post(
       "/user/research-library/references/lookup",
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(lookupLimiter),

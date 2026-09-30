@@ -3,38 +3,40 @@ import ZoteroController from './ZoteroController.mjs'
 
 export default {
   apply(webRouter) {
+    webRouter.post(
+      '/user/zotero',
+      AuthenticationController.requireLogin(),
+      ZoteroController.link,
+    )
     // Get Zotero groups for the create-file modal
     webRouter.get(
       '/user/zotero/groups',
       AuthenticationController.requireLogin(),
-      ZoteroController.getGroups
+      ZoteroController.getGroups,
     )
 
     // Unlink Zotero account
     webRouter.delete(
       '/user/zotero',
       AuthenticationController.requireLogin(),
-      ZoteroController.unlink
-   )
+      ZoteroController.unlink,
+    )
     webRouter.get(
       '/user/zotero/status',
       AuthenticationController.requireLogin(),
-      ZoteroController.getConnectionStatus
+      ZoteroController.getConnectionStatus,
     )
 
     webRouter.get(
       '/user/zotero/oauth',
       AuthenticationController.requireLogin(),
-      ZoteroController.oauth
+      ZoteroController.oauth,
     )
     // callback for Zotero OAuth flow
     webRouter.get(
       '/user/zotero/oauth/callback',
       AuthenticationController.requireLogin(),
-      ZoteroController.oauthCallback
+      ZoteroController.oauthCallback,
     )
-
-
-
   },
 }
