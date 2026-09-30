@@ -4,7 +4,7 @@ Plain-manifest deployment of [Overleaf CE+](https://github.com/yu-i-i/overleaf-c
 (Extended Community Edition) in namespace `kovacovsky-ns`, replacing the old
 CERIT catalog chart (which is no longer used or installed).
 
-- Public URL: https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+- Public URL: https://overleaf.dyn.cloud.e-infra.cz
 - Overleaf image: `overleafcep/sharelatex:6.2.0-ext-v5.0`
 - MongoDB: `mongo:8.0` StatefulSet, single-node replica set `overleaf`, headless
   service (replica-set member registered under the pod-stable DNS name
@@ -24,7 +24,7 @@ undergoing upstream work. 6.2.0-ext is the stable CE+ base.
 ## Writing assistant (grammar + AI)
 
 The `writing-assistant` CE+ module (in the custom image
-`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23`, built from
+`cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s25`, built from
 `k8s/image/Dockerfile`) adds:
 
 1. **Grammar/style checking** via a self-hosted LanguageTool
@@ -54,8 +54,8 @@ Build and deploy the custom image:
 
 ```bash
 docker build -f k8s/image/Dockerfile \
-  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23 .
-docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23
+  -t cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s25 .
+docker push cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s25
 # then update the image in overleaf-deployment.yaml and
 # overleaf-history-flush-all-cronjob.yaml and kubectl apply
 ```
@@ -86,22 +86,17 @@ shared figures are future extensions (see the research-workspace brief).
 
 ## Zotero
 
-The CE+ Zotero module is compiled into the image. To activate it, register
-an OAuth application at https://www.zotero.org/oauth/apps with callback:
+Zotero uses per-user API keys and does not require a shared OAuth application.
+Each user links their own account under Account Settings → Zotero by creating a
+read-only key at https://www.zotero.org/settings/keys/new and pasting it into
+the web UI. The key and Zotero user ID are encrypted in that user's MongoDB
+record using `ZOTERO_TOKEN_CIPHER_PASSWORD`; credentials are never returned to
+the browser or shared with project collaborators.
 
-```text
-https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz/user/zotero/oauth/callback
-```
-
-then fill `ZOTERO_CLIENT_KEY` and `ZOTERO_CLIENT_SECRET` in the
-`overleaf-secrets` secret (read-only access to personal + group libraries
-is requested; `ZOTERO_TOKEN_CIPHER_PASSWORD` is already set):
-
-```bash
-kubectl patch secret overleaf-secrets -n kovacovsky-ns \
-  -p '{"stringData":{"ZOTERO_CLIENT_KEY":"<key>","ZOTERO_CLIENT_SECRET":"<secret>"}}'
-kubectl rollout restart deployment/overleaf -n kovacovsky-ns
-```
+The Research Library panel can import the linked user's personal Zotero
+library. Imports use the existing DOI/arXiv/title deduplication and are
+one-time copies rather than background synchronization. Each collaborator may
+link and import from a different Zotero account.
 
 ## GitHub Sync
 
@@ -138,7 +133,7 @@ kubectl create secret generic overleaf-secrets -n "$NS" \
 The GitHub OAuth App callback URL must be:
 
 ```text
-https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz/user/github-sync/oauth2/callback
+https://overleaf.dyn.cloud.e-infra.cz/user/github-sync/oauth2/callback
 ```
 
 OAuth start endpoint: `/user/github-sync/oauth2` (redirects to GitHub).
@@ -217,7 +212,7 @@ kubectl exec -n "$NS" deployment/redis -- redis-cli ping
 kubectl logs -n "$NS" deployment/overleaf -c sharelatex -f
 
 # public HTTPS (expect 200/302)
-curl -I https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+curl -I https://overleaf.dyn.cloud.e-infra.cz
 ```
 
 ## Files

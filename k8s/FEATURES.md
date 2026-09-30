@@ -30,7 +30,7 @@ Legend for "Test result":
 | Import file from external URL          | yes                        | **yes** (`url` added to linked file types; linked-url-proxy running in-pod)          | no                                            | no                                | no           | PRESENT — `hasLinkUrlFeature=true`                                                                                                                                                 |
 | GitHub Sync                            | yes                        | yes (`GITHUB_SYNC_ENABLED=true`)                                                     | yes (OAuth app, set)                          | github.com                        | no           | PENDING-USER — OAuth start redirects correctly; callback URL validated; E2E bidirectional sync needs account owner                                                                 |
 | Git Bridge (git clone/push)            | yes                        | **yes** (`GIT_BRIDGE_ENABLED=true`)                                                  | per-user PAT                                  | self-hosted git-bridge service    | no           | **PASS** — authenticated clone and push verified against the sample project; repositories and SQLite metadata use a dedicated 10Gi PVC                                             |
-| Zotero                                 | yes                        | wired (`zotero` in linked types; env + cipher secret plumbed)                        | yes — Zotero OAuth app **not yet registered** | zotero.org                        | no           | BLOCKED-ZOTERO-APP — module activates when `ZOTERO_CLIENT_KEY/SECRET` are filled in `overleaf-secrets`; callback must be registered at zotero.org                                  |
+| Zotero                                 | yes                        | **yes** (`zotero` in linked types)                                                    | per-user API key, encrypted                    | zotero.org                        | custom       | **PASS** — API key validation, encrypted per-user storage, personal-library BibTeX fetch, and Research Library import verified; QA credentials and imported test records removed   |
 | Multilingual spell checking (Hunspell) | yes                        | yes                                                                                  | no                                            | no                                | no           | PRESENT — 215 dictionary files (~107 languages incl. cs, sk, de, fr, pl, en-GB/US) shipped; client-side; selection/underline/learn-word are browser UI                             |
 | DOCX/Markdown import + export          | yes                        | **yes** (`ENABLE_PANDOC_CONVERSIONS=true` + pandoc/zip/TeX packages in custom image) | no                                            | no                                | custom image | **PASS** — md→project, docx→project, project→docx (valid Word file), project→md (zip) all exercised; imported projects compile (lualatex); nginx UUID fix for conversion downloads |
 
@@ -65,7 +65,7 @@ Comments                     PRESENT (needs browser click-through)
 Track changes                PRESENT (needs browser click-through)
 Symbol palette               PRESENT
 Reference picker             PRESENT
-Zotero                       BLOCKED (OAuth app registration pending)
+Zotero                       PASS (per-user key + library import)
 Template gallery             PASS
 GitHub Sync                  PENDING-USER (bidirectional sync test)
 Git Bridge                   PASS (authenticated clone/push)
@@ -91,13 +91,9 @@ Sandboxed compiles           DEFERRED
   must exist inside the sharelatex image itself. The stock CE+ image does
   not contain it; do not install into running pods — a derived image is
   required (built in Phase 2 together with the new modules).
-- Zotero: `ZOTERO_CLIENT_KEY`, `ZOTERO_CLIENT_SECRET` (empty in
-  `overleaf-secrets` until an OAuth app is registered at
-  https://www.zotero.org/oauth/apps with callback
-  `https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz/user/zotero/oauth/callback`),
-  plus `ZOTERO_TOKEN_CIPHER_PASSWORD` (already set, high-entropy, so token
-  encryption is PVC-independent). CE+ requests read-only access to the
-  user library and group libraries.
+- Zotero uses encrypted per-user API keys entered in Account Settings. No
+  shared OAuth application is required. Research Library imports are one-time
+  copies; automatic Zotero synchronization is not implemented.
 - Feature defaults (`settings.defaults.js`): `github: true`,
   `gitBridge: true`, `versioning: true`, `references: true`,
   `trackChanges: true`.

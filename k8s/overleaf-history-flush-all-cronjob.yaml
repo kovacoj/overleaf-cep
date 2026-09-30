@@ -38,7 +38,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: flush-all
-              image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s23
+              image: cerit.io/kovacoj1/overleaf-cep:6.2.0-ext-v5.0-k8s25
               imagePullPolicy: IfNotPresent
               workingDir: /overleaf/services/project-history
               command: ["node", "scripts/flush_all.js"]

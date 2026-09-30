@@ -22,7 +22,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+    - host: overleaf.dyn.cloud.e-infra.cz
       http:
         paths:
           - path: /
@@ -34,5 +34,5 @@ spec:
                   number: 80
   tls:
     - hosts:
-        - overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
-      secretName: overleaf-kovacovsky-ns-dyn-cloud-e-infra-cz-tls
+        - overleaf.dyn.cloud.e-infra.cz
+      secretName: overleaf-dyn-cloud-e-infra-cz-tls

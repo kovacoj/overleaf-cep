@@ -63,7 +63,7 @@ spec:
             - name: GIT_BRIDGE_POSTBACK_BASE_URL
               value: "http://git-bridge:8000"
             - name: GIT_BRIDGE_ALLOWED_CORS_ORIGINS
-              value: "https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz"
+              value: "https://overleaf.dyn.cloud.e-infra.cz"
             - name: GIT_BRIDGE_USER_PASSWORD_ENABLED
               value: "false"
             - name: GIT_BRIDGE_REPOSTORE_MAX_FILE_NUM
@@ -138,10 +138,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
-      secretName: overleaf-tls
+        - overleaf.dyn.cloud.e-infra.cz
+      secretName: overleaf-dyn-cloud-e-infra-cz-tls
   rules:
-    - host: overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+    - host: overleaf.dyn.cloud.e-infra.cz
       http:
         paths:
           - path: /git/([0-9a-f]{24}(?:\.git)?)/(.*)

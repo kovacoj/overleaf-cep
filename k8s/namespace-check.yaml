@@ -3,7 +3,7 @@
 # Target deployment facts (verified 2026-09-24):
 #
 #   Namespace:            kovacovsky-ns (Rancher cluster c-m-qvndqhf6, project p-54h9x)
-#   Public hostname:      overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+#   Public hostname:      overleaf.dyn.cloud.e-infra.cz
 #   Ingress class:        nginx (cert-manager issuer: letsencrypt-prod)
 #   StorageClasses:       zfs-csi (RWO, WaitForFirstConsumer) - used for mongo + overleaf data
 #                         nfs-csi (default, RWX)
@@ -22,8 +22,8 @@ metadata:
     app.kubernetes.io/part-of: overleaf
 data:
   namespace: kovacovsky-ns
-  hostname: overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz
+  hostname: overleaf.dyn.cloud.e-infra.cz
   overleaf-image: overleafcep/sharelatex:6.2.0-ext-v5.0
   mongo-image: mongo:8.0
   redis-image: redis:6.2
-  github-sync-callback: https://overleaf-kovacovsky-ns.dyn.cloud.e-infra.cz/user/github-sync/oauth2/callback
+  github-sync-callback: https://overleaf.dyn.cloud.e-infra.cz/user/github-sync/oauth2/callback
